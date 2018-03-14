@@ -25,7 +25,7 @@ from ase.build import *
 
 def load_data(input_dir):
     """
-    Loads data and splits them into input and target
+    Load data and split them into input and target
     :param input_dir: directroy to read training and test data from
     :return: data (input) and labels (target)
     """
