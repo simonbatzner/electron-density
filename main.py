@@ -5,7 +5,7 @@
 References:
     [1] Brockherde et al. Bypassing the Kohn-Sham equations with machine learning. Nature Communications 8, 872 (2017)
 
-Simon Batzner,
+Simon Batzner, Steven Torrisi, Jon Vandermause
 """
 
 from __future__ import absolute_import
