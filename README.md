@@ -1,4 +1,4 @@
-# AP275_MLProject
+# ML_electron-density
 
 Class Project for Applied Physics 275: Computational Design of Materials (Harvard University)
 
