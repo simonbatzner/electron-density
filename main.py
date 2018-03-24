@@ -34,13 +34,6 @@ class System(object):
         self.real_charge = self.read_charge(filename=filename)
         self.k_charge = self.to_recip(self.real_charge, self.struc)
 
-        # current_class = self.__class__
-        # inits = []
-        # while (current_class.__name__ != "System"):
-        #     inits.append(current_class.init)
-        #     current_class = current_class.__bases__[0]
-        # for i in reversed(inits):
-        #     i(self)
 
     def read_charge(self):
         """
@@ -146,7 +139,6 @@ def main():
     # arguments
     parser = argparse.ArgumentParser(
         description='Neural Network approach to learning the ground-state charge density')
-    # parser.add_argument('--batch', type=int, default=64)
     parser.add_argument('--input_dir', type=str, default='./')
     parser.add_argument('--output_dir', type=str, required=True)
     parser.add_argument('--hidden', nargs='+', type=int)
