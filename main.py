@@ -21,15 +21,78 @@ from keras.utils.vis_utils import plot_model
 from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
 from ase.build import *
+from ase.io import read, write
+
+
+
+class System(object):
+
+    def __init__(self, filename, struc):
+        self.filename = filename
+        self.struc = struc
+        self.label = self.struc.get_potential_energy()
+        self.real_charge = self.read_charge(filename=filename)
+        self.k_charge = self.to_recip(self.real_charge, self.struc)
+
+        # current_class = self.__class__
+        # inits = []
+        # while (current_class.__name__ != "System"):
+        #     inits.append(current_class.init)
+        #     current_class = current_class.__bases__[0]
+        # for i in reversed(inits):
+        #     i(self)
+
+    def read_charge(self):
+        """
+        read charge density from QE charge density file
+        """
+        pass
+
+    def to_recip(self):
+        """
+        convert real space charge density to k-space charge density
+        """
+        self.k_charge = np.fft.fftn(self.r_charge)
+        self.k_charge = self.k_charge / self.struc.get_volume()
+
+
+    def info(self):
+        print(self.filename)
+        print(self.energy)
 
 
 def load_data(input_dir):
     """
-    Load data and split them into input and target
+    Read data from file
     :param input_dir: directroy to read training and test data from
-    :return: data (input) and labels (target)
+    :return: list of systems
     """
-    return data, labels
+    files = os.listdir(input_dir)
+    filename_out = os.path.join(input_dir, '')  #add QE filename suffix
+    filename_chg = os.path.join(input_dir, 'charge-density.dat')
+    systems = []
+
+    for file in files:
+        struc = read(filename=filename_out, format='espresso-out')
+        System(filename=input_dir, struc=struc)
+        systems.append(System)
+
+    return systems
+
+
+def setup_data(systems):
+    """
+    Split data into input and corresponding labels
+    :param systems: list of structures to train/ test on
+    :return: input data X and labels
+    """
+    X = []
+    labels = []
+    for system in systems:
+        X.append(system.real_charge)
+        labels.append(system.label)
+
+    return X, labels
 
 
 def init_architecture(X, hidden_size, summary, mode='regression', activation='relu'):
@@ -96,7 +159,11 @@ def main():
     args = parser.parse_args()
 
     # load
-    data, labels = load_data(args.input_dir)
+    systems = load_data(args.input_dir)
+
+    # define input and labels
+    X, labels = setup_data(systems)
+
 
     # build model
     model = init_architecture(X=data, hidden_size=args.hidden, summary=args.summary, mode=args.mode,
