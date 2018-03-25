@@ -60,7 +60,6 @@ def load_data(input_dir):
     :param input_dir: directroy to read training and test data from
     :return: list of systems
     """
-    import os
     rootdir = input_dir
     systems = []
 
