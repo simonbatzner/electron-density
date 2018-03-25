@@ -17,12 +17,11 @@ import argparse
 
 import numpy as np
 from keras.models import Sequential
-from keras.layers import (Activation, Dense, LeakyReLU)
+from keras.layers import Dense
 from keras.utils.vis_utils import plot_model
 from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
-from ase.build import *
-from ase.io import read, write
+from ase.io import read
 
 
 class System(object):
@@ -50,7 +49,6 @@ class System(object):
         print(self.filename)
 
 
-
 def load_data(input_dir):
     """
     Read data from file
@@ -61,10 +59,10 @@ def load_data(input_dir):
     systems = []
 
     for subdir, dirs, files in os.walk(rootdir):
-        for file in files:
-            if file == '':  # add QE filename suffix
-                struc = read(filename=os.path.join(subdir, file), format='espresso-out')
-                System(filename=os.path.join(subdir, file), struc=struc)
+        for filename in files:
+            if filename == '':  # add QE filename suffix
+                struc = read(filename=os.path.join(subdir, filename), format='espresso-out')
+                System(filename=os.path.join(subdir, filename), struc=struc)
                 systems.append(System)
 
     return systems
@@ -76,30 +74,33 @@ def setup_data(systems):
     :param systems: list of structures to train/ test on
     :return: input data X and labels
     """
-    X = []
+    data = []
     labels = []
     for system in systems:
-        X.append(system.real_charge)
+        data.append(system.real_charge)
         labels.append(system.label)
 
-    return X, labels
+    return data, labels
 
 
-def init_architecture(X, hidden_size, summary, mode='regression', activation='relu'):
+def init_architecture(data, hidden_size, summary, activation='relu'):
     """
     Setup model layout
-    :param X: input data
+    :param data: input data
     :param hidden_size: tuple of number of hidden layers, eg. (30, 30, 40) builds a network with hidden layers 30-30-40
     :param summary: boolean, true plots a summary
-    :param mode: regression or classification
     :param activation: activiation function
     :return: keras Sequential model
     """
     model = Sequential()
-    model.add(Dense(hidden_size[0], input_dim=X.shape[1], activation=activation))
+    model.add(Dense(hidden_size[0], input_dim=data[1].shape[1], activation=activation))
     for layer_size in hidden_size[1:]:
         model.add(Dense(layer_size, activation=activation))
         model.add(Dense(1, activation='sigmoid'))
+
+    if summary:
+        model.summary()
+
     return model
 
 
@@ -121,11 +122,11 @@ def train(model, training_data, training_labels, validation_data, validation_lab
     return history
 
 
-def inference(model, X_test, Y_test):
+def inference(model, x_test, Y_test):
     """"
     Compute and print test accuracy using trained model
     """
-    loss, acc = model.evaluate(X_test, Y_test, verbose=0)
+    loss, acc = model.evaluate(x_test, Y_test, verbose=0)
     print('Test loss:', loss)
     print('Test accuracy:', acc)
 
@@ -151,10 +152,10 @@ def main():
     systems = load_data(args.input_dir)
 
     # define input and labels
-    X, labels = setup_data(systems)
+    data, labels = setup_data(systems)
 
     # build model
-    model = init_architecture(X=data, hidden_size=args.hidden, summary=args.summary, mode=args.mode,
+    model = init_architecture(data=data, hidden_size=args.hidden, summary=args.summary,
                               activation=args.activation)
     set_loss(model=model, loss='mean_squared_error', optimizer='Adam')
 
@@ -163,7 +164,7 @@ def main():
                to_file=os.path.join(args.output_dir, 'model.png'))
 
     # train/val vs. test split
-    x_trainval, x_test, y_trainval, y_test = train_test_split(X, labels, test_size=args.test_size, random_state=seed)
+    x_trainval, x_test, y_trainval, y_test = train_test_split(data, labels, test_size=args.test_size, random_state=seed)
 
     # train vs. val split
     # k-fold cross-validation, each fold is used once as a validation while the k - 1 remaining are used for training
@@ -175,10 +176,10 @@ def main():
         history.append(
             train(model=model, training_data=x_trainval[train_index], training_labels=y_trainval[train_index],
                   validation_data=x_trainval[val_index],
-                  validation_labels=y_trainval[val_index]), epochs=args.epochs)
+                  validation_labels=y_trainval[val_index], epochs=args.epochs))
 
     # predict
-    inference(model=model, X_test=x_test, Y_test=y_test)
+    inference(model=model, x_test=x_test, Y_test=y_test)
 
 
 if __name__ == "__main__":
