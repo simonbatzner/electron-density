@@ -15,6 +15,7 @@ from __future__ import print_function
 import os
 import argparse
 
+import numpy as np
 from keras.models import Sequential
 from keras.layers import (Activation, Dense, LeakyReLU)
 from keras.utils.vis_utils import plot_model
@@ -24,16 +25,13 @@ from ase.build import *
 from ase.io import read, write
 
 
-
 class System(object):
-
     def __init__(self, filename, struc):
         self.filename = filename
         self.struc = struc
         self.label = self.struc.get_potential_energy()
         self.real_charge = self.read_charge()
         self.k_charge = self.to_recip()
-
 
     def read_charge(self):
         """
@@ -45,13 +43,12 @@ class System(object):
         """
         convert real space charge density to k-space charge density
         """
-        self.k_charge = np.fft.fftn(self.r_charge)
+        self.k_charge = np.fft.fftn(self.real_charge)
         self.k_charge = self.k_charge / self.struc.get_volume()
-
 
     def info(self):
         print(self.filename)
-        print(self.energy)
+
 
 
 def load_data(input_dir):
@@ -65,11 +62,10 @@ def load_data(input_dir):
 
     for subdir, dirs, files in os.walk(rootdir):
         for file in files:
-            if file == '':      #add QE filename suffix
-                with open(os.path.join(subdir, file), 'r') as f:
-                    struc = read(filename=file, format='espresso-out')
-                    System(filename=os.path.join(subdir, file), struc=struc)
-                    systems.append(System)
+            if file == '':  # add QE filename suffix
+                struc = read(filename=os.path.join(subdir, file), format='espresso-out')
+                System(filename=os.path.join(subdir, file), struc=struc)
+                systems.append(System)
 
     return systems
 
@@ -156,7 +152,6 @@ def main():
 
     # define input and labels
     X, labels = setup_data(systems)
-
 
     # build model
     model = init_architecture(X=data, hidden_size=args.hidden, summary=args.summary, mode=args.mode,
