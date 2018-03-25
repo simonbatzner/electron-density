@@ -57,7 +57,6 @@ def load_data(input_dir, train_min, train_max):
     :param train_max: final directory to read from
     :return: list of systems
     """
-    rootdir = input_dir
     systems = []
 
     def get_fnames(dir, train_min, train_max):
