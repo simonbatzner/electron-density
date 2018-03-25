@@ -49,21 +49,32 @@ class System(object):
         print(self.filename)
 
 
-def load_data(input_dir):
+def load_data(input_dir, train_min, train_max):
     """
     Read data from file
     :param input_dir: directroy to read training and test data from
+    :param train_min: starting directory to read from
+    :param train_max: final directory to read from
     :return: list of systems
     """
     rootdir = input_dir
     systems = []
 
-    for subdir, dirs, files in os.walk(rootdir):
-        for filename in files:
-            if filename == '':  # add QE filename suffix
-                struc = read(filename=os.path.join(subdir, filename), format='espresso-out')
-                System(filename=os.path.join(subdir, filename), struc=struc)
-                systems.append(System)
+    def get_fnames(dir, train_min, train_max):
+        train_list = [str(i) for i in list(range(train_min, train_max + 1))]
+        r = []
+        for root, dirs, files in os.walk(dir):
+            for dir in dirs:
+                if dir in train_list:
+                    r.append(os.path.join(root, dir, ''))  # add QE filename suffix
+        return r
+
+    fnames = get_fnames(dir=input_dir, train_min=train_min, train_max=train_max)
+
+    for filename in fnames:
+        struc = read(filename=filename, format='espresso-out')
+        System(filename=filename, struc=struc)
+        systems.append(System)
 
     return systems
 
@@ -143,13 +154,15 @@ def main():
     parser.add_argument('--mode', type=str, default='regression')
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--nfolds', type=int, default=10)
+    parser.add_argument('--train_min', type=int, default=1)
+    parser.add_argument('--train_max', type=int, default=1)
     parser.add_argument('--test_size', type=float, default=0.2)
     parser.add_argument('--hidden', nargs='+', type=int)
     parser.add_argument('--summary', type=bool, default=False)
     args = parser.parse_args()
 
     # load
-    systems = load_data(args.input_dir)
+    systems = load_data(args.input_dir, train_min=args.train_min, train_max=args.train_max)
 
     # define input and labels
     data, labels = setup_data(systems)
