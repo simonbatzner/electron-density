@@ -31,8 +31,8 @@ class System(object):
         self.filename = filename
         self.struc = struc
         self.label = self.struc.get_potential_energy()
-        self.real_charge = self.read_charge(filename=filename)
-        self.k_charge = self.to_recip(self.real_charge, self.struc)
+        self.real_charge = self.read_charge()
+        self.k_charge = self.to_recip()
 
 
     def read_charge(self):
@@ -68,7 +68,7 @@ def load_data(input_dir):
             if file == '':      #add QE filename suffix
                 with open(os.path.join(subdir, file), 'r') as f:
                     struc = read(filename=file, format='espresso-out')
-                    System(filename=input_dir, struc=struc)
+                    System(filename=os.path.join(subdir, file), struc=struc)
                     systems.append(System)
 
     return systems
