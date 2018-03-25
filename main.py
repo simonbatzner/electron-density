@@ -60,15 +60,17 @@ def load_data(input_dir):
     :param input_dir: directroy to read training and test data from
     :return: list of systems
     """
-    files = os.listdir(input_dir)
-    filename_out = os.path.join(input_dir, '')  #add QE filename suffix
-    filename_chg = os.path.join(input_dir, 'charge-density.dat')
+    import os
+    rootdir = input_dir
     systems = []
 
-    for file in files:
-        struc = read(filename=filename_out, format='espresso-out')
-        System(filename=input_dir, struc=struc)
-        systems.append(System)
+    for subdir, dirs, files in os.walk(rootdir):
+        for file in files:
+            if file == '':      #add QE filename suffix
+                with open(os.path.join(subdir, file), 'r') as f:
+                    struc = read(filename=file, format='espresso-out')
+                    System(filename=input_dir, struc=struc)
+                    systems.append(System)
 
     return systems
 
