@@ -57,10 +57,10 @@ class System(object):
 
 def load_data(input_dir, train_min, train_max):
     """
-    Read data from file
+    Read in data from file
     :param input_dir: directroy to read training and test data from
-    :param train_min: starting directory to read from
-    :param train_max: final directory to read from
+    :param train_min: starting subdirectory to read from
+    :param train_max: final subdirectory to read from
     :return: list of systems
     """
     systems = []
@@ -99,18 +99,18 @@ def setup_data(systems):
     return data, labels
 
 
-def init_architecture(data, hidden_size, summary, activation='relu'):
+def init_architecture(input_shape, hidden_size, summary, activation='relu'):
     """
     Built Neural Network using Keras
 
-    :param data: input data
+    :param input_shape: shape of the input data
     :param hidden_size: tuple of number of hidden layers, eg. (30, 30, 40) builds a network with hidden layers 30-30-40
     :param summary: boolean, true plots a summary
     :param activation: activiation function
     :return: keras Sequential model
     """
     model = Sequential()
-    model.add(Dense(hidden_size[0], input_dim=data[1].shape[1], activation=activation))
+    model.add(Dense(hidden_size[0], input_dim=input_shape[1], activation=activation))
     for layer_size in hidden_size[1:]:
         model.add(Dense(layer_size, activation=activation))
         model.add(Dense(1, activation='sigmoid'))
@@ -129,25 +129,25 @@ def set_loss(model, loss, optimizer):
     return model
 
 
-def train(model, training_data, training_labels, validation_data, validation_labels, epochs, batchsize=64):
+def train(model, training_data, training_labels, validation_data, validation_labels, batchsize=64):
     """"
     Train Neural Network model
     """
     history = model.fit(training_data, training_labels, validation_data=(validation_data, validation_labels),
                         batch_size=batchsize,
-                        epochs=epochs, verbose=1, shuffle=True)
+                        verbose=1, shuffle=True)
     return history
 
 
-def inference(model, type, x_test, Y_test):
+def inference(model, type, x_test, y_test):
     """"
     Compute and print test accuracy using trained model
     """
-    if type = 'nn':
-        loss, acc = model.evaluate(x_test, Y_test, verbose=0)
+    if type == 'nn':
+        loss, acc = model.evaluate(x_test, y_test, verbose=0)
     elif type == 'krr':
         y_predict_test = model.predict(x_test)
-        loss, acc =
+        #loss, acc =
 
     return loss, acc
 
@@ -157,13 +157,12 @@ def main():
 
     # arguments
     parser = argparse.ArgumentParser(
-        description='Neural Network approach to learning the ground-state charge density')
+        description='Learning the ground-state charge density')
     parser.add_argument('--input_dir', type=str, default='./')
+    parser.add_argument('--model', type=str, default='')
     parser.add_argument('--output_dir', type=str, required=True)
     parser.add_argument('--hidden', nargs='+', type=int)
-    parser.add_argument('--mode', type=str, default='regression')
-    parser.add_argument('--epochs', type=int, default=100)
-    parser.add_argument('--nfolds', type=int, default=10)
+    parser.add_argument('--nfolds', type=int, default=5)
     parser.add_argument('--train_min', type=int, default=1)
     parser.add_argument('--train_max', type=int, default=1)
     parser.add_argument('--test_size', type=float, default=0.2)
@@ -171,42 +170,42 @@ def main():
     parser.add_argument('--summary', type=bool, default=False)
     args = parser.parse_args()
 
-    # load
+    # load DFT output data from file into list of Systems objects
     systems = load_data(args.input_dir, train_min=args.train_min, train_max=args.train_max)
 
     # define input and labels
     data, labels = setup_data(systems)
 
-    # train/val vs. test split
+    # split data into training/validation and test
     x_trainval, x_test, y_trainval, y_test = train_test_split(data, labels, test_size=args.test_size, random_state=seed)
 
-    # train vs. val split
+    # split trainval into training and validation data
     # k-fold cross-validation, each fold is used once as a validation while the k - 1 remaining are used for training
-    kf = KFold(n_splits=10, shuffle=True, random_state=seed)
+    kf = KFold(n_splits=args.nfolds, shuffle=True, random_state=seed)
     history = []
 
     # NEURAL NETWORK
     if args.model.lower() == 'nn':
-        model = init_architecture(data=data, hidden_size=args.hidden, summary=args.summary,
+        model = init_architecture(input_dim=data[1].shape, hidden_size=args.hidden, summary=args.summary,
                                   activation=args.activation)
         set_loss(model=model, loss='mean_squared_error', optimizer='Adam')
 
-        # visualize
+        # save image of model architecture to file
         plot_model(model, show_shapes=True,
                    to_file=os.path.join(args.output_dir, 'model.png'))
 
-        # train
+        # train NN
         for train_index, val_index in kf.split(x_trainval):
             history.append(
                 train(model=model, training_data=x_trainval[train_index], training_labels=y_trainval[train_index],
                       validation_data=x_trainval[val_index],
-                      validation_labels=y_trainval[val_index], epochs=args.epochs))
+                      validation_labels=y_trainval[val_index]))
 
 
     # KERNEL RIDGE REGRESSION
     elif args.model.lower() == 'krr':
 
-        model = GridSearchCV(KernelRidge(kernel='rbf', gamma=0.1), cv=5,
+        model = GridSearchCV(KernelRidge(kernel='rbf', gamma=0.1), cv=args.nfolds,
                              param_grid={"alpha": [1e0, 0.1, 1e-2, 1e-3],
                                          "gamma": np.logspace(-2, 2, 5)})
 
@@ -216,7 +215,7 @@ def main():
         print("ERROR: no proper model specified, please specify 'NN' or 'KRR'.")
 
     # predict
-    loss, acc = inference(model=model, type=args.model.lower(), x_test=x_test, Y_test=y_test)
+    loss, acc = inference(model=model, type=args.model.lower(), x_test=x_test, y_test=y_test)
 
     # results
     print("Test accuracy: {}".format(acc))
