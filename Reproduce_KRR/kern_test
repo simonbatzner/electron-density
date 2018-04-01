@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Apr  1 16:04:55 2018
+
+@author: jonpvandermause
+"""
+
+# choose reference potential
+dist_ref =  0.75
+grid_len = 2
+grid_space = 0.01
+xv_ref, yv_ref, zv_ref, gauss_ref = pot_rep(dist_ref, grid_len, \
+                                             grid_space)
+
+# sweep through distances and calculate kernel
+dists = np.linspace(0.5, 2, 100)
+sig = 10
+kerns = []
+
+for n in range(len(dists)):
+    dist = dists[n]
+    
+    xv, yv, zv, gauss = pot_rep(dist, grid_len, grid_space)
+    
+    pot_dist, kern = get_kern(gauss_ref, gauss, sig)
+    
+    kerns.append(kern)
+    
+    print(n)
+    
+fig = plt.figure()
+ax = fig.add_subplot(1,1,1)
+ax.plot(dists, kerns)
+plt.show()
