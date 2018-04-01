@@ -4,6 +4,7 @@
 
 References:
     [1] Brockherde et al. Bypassing the Kohn-Sham equations with machine learning. Nature Communications 8, 872 (2017)
+    [2] KRR work based on http://scikit-learn.org/stable/auto_examples/plot_kernel_ridge_regression.html#sphx-glr-auto-examples-plot-kernel-ridge-regression-py (Jan Hendrik Metzen <jhm@informatik.uni-bremen.de>)
 
 Simon Batzner, Steven Torrisi, Jon Vandermause
 """
@@ -16,12 +17,17 @@ import os
 import argparse
 
 import numpy as np
+import matplotlib.pyplot as plt
+
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.utils.vis_utils import plot_model
 from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
 from ase.io import read
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import learning_curve
+from sklearn.kernel_ridge import KernelRidge
 
 
 class System(object):
@@ -95,7 +101,8 @@ def setup_data(systems):
 
 def init_architecture(data, hidden_size, summary, activation='relu'):
     """
-    Setup model layout
+    Built Neural Network using Keras
+
     :param data: input data
     :param hidden_size: tuple of number of hidden layers, eg. (30, 30, 40) builds a network with hidden layers 30-30-40
     :param summary: boolean, true plots a summary
@@ -124,7 +131,7 @@ def set_loss(model, loss, optimizer):
 
 def train(model, training_data, training_labels, validation_data, validation_labels, epochs, batchsize=64):
     """"
-    Train model
+    Train Neural Network model
     """
     history = model.fit(training_data, training_labels, validation_data=(validation_data, validation_labels),
                         batch_size=batchsize,
@@ -132,13 +139,17 @@ def train(model, training_data, training_labels, validation_data, validation_lab
     return history
 
 
-def inference(model, x_test, Y_test):
+def inference(model, type, x_test, Y_test):
     """"
     Compute and print test accuracy using trained model
     """
-    loss, acc = model.evaluate(x_test, Y_test, verbose=0)
-    print('Test loss:', loss)
-    print('Test accuracy:', acc)
+    if type = 'nn':
+        loss, acc = model.evaluate(x_test, Y_test, verbose=0)
+    elif type == 'krr':
+        y_predict_test = model.predict(x_test)
+        loss, acc =
+
+    return loss, acc
 
 
 def main():
@@ -166,15 +177,6 @@ def main():
     # define input and labels
     data, labels = setup_data(systems)
 
-    # build model
-    model = init_architecture(data=data, hidden_size=args.hidden, summary=args.summary,
-                              activation=args.activation)
-    set_loss(model=model, loss='mean_squared_error', optimizer='Adam')
-
-    # visualize
-    plot_model(model, show_shapes=True,
-               to_file=os.path.join(args.output_dir, 'model.png'))
-
     # train/val vs. test split
     x_trainval, x_test, y_trainval, y_test = train_test_split(data, labels, test_size=args.test_size, random_state=seed)
 
@@ -183,15 +185,42 @@ def main():
     kf = KFold(n_splits=10, shuffle=True, random_state=seed)
     history = []
 
-    # train
-    for train_index, val_index in kf.split(x_trainval):
-        history.append(
-            train(model=model, training_data=x_trainval[train_index], training_labels=y_trainval[train_index],
-                  validation_data=x_trainval[val_index],
-                  validation_labels=y_trainval[val_index], epochs=args.epochs))
+    # NEURAL NETWORK
+    if args.model.lower() == 'nn':
+        model = init_architecture(data=data, hidden_size=args.hidden, summary=args.summary,
+                                  activation=args.activation)
+        set_loss(model=model, loss='mean_squared_error', optimizer='Adam')
+
+        # visualize
+        plot_model(model, show_shapes=True,
+                   to_file=os.path.join(args.output_dir, 'model.png'))
+
+        # train
+        for train_index, val_index in kf.split(x_trainval):
+            history.append(
+                train(model=model, training_data=x_trainval[train_index], training_labels=y_trainval[train_index],
+                      validation_data=x_trainval[val_index],
+                      validation_labels=y_trainval[val_index], epochs=args.epochs))
+
+
+    # KERNEL RIDGE REGRESSION
+    elif args.model.lower() == 'krr':
+
+        model = GridSearchCV(KernelRidge(kernel='rbf', gamma=0.1), cv=5,
+                             param_grid={"alpha": [1e0, 0.1, 1e-2, 1e-3],
+                                         "gamma": np.logspace(-2, 2, 5)})
+
+        model.fit(x_trainval, y_trainval)
+
+    else:
+        print("ERROR: no proper model specified, please specify 'NN' or 'KRR'.")
 
     # predict
-    inference(model=model, x_test=x_test, Y_test=y_test)
+    loss, acc = inference(model=model, type=args.model.lower(), x_test=x_test, Y_test=y_test)
+
+    # results
+    print("Test accuracy: {}".format(acc))
+    print("Test loss: {}".format(loss))
 
 
 if __name__ == "__main__":
