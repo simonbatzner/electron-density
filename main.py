@@ -5,7 +5,7 @@
     # Arguments
 
         input_dir: directory containing subdirectories of files
-        model_type: neural network of kernel ridge regression model, specify: 'nn' or 'krr'
+        type: neural network of kernel ridge regression model, specify: 'nn' or 'krr'
         output_dir: directory to write figures and output data to
         hidden: list or tuple containing neural network architecture, e.g. [30, 30] creates a neural network w/ 2 layers a 30 neurons
         nfolds: int, number of folds for k-fold cross validation
@@ -193,9 +193,7 @@ def main(data, labels, type):
                                   activation=activation)
         set_loss(model=model, loss='mean_squared_error', optimizer='Adam', metrics=['mse'])
 
-        # save image of model architecture to file
-        plot_model(model, show_shapes=True,
-                   to_file=os.path.join(output_dir, 'model.png'))
+
 
         # train NN
         for train_index, val_index in kf.split(x_trainval):
@@ -218,6 +216,8 @@ def main(data, labels, type):
         print("ERROR: no proper model type specified, please specify 'NN' or 'KRR'.")
 
     # predict
+    print(type(x_test[1]))
+    print(type(y_test[1]))
     loss, y_predict_test = inference(model=model, type = type.lower(), x_test=x_test, y_test=y_test)
 
     # results
