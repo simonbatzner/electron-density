@@ -161,7 +161,7 @@ def inference(model, type, x_test, y_test):
 
     # SIMON: -- TEST EQUIVALENCY OF KERAS RMSE METRIC AND SELF-IMPLEMENTED
     if type == 'nn':
-        loss = sqrt(model.evaluate(x_test, y_test, verbose=2))
+        loss = sqrt(model.evaluate(x_test, y_test, verbose=2)[1])
         y_predict_test = model.predict(x_test, verbose=2)
 
     elif type == 'krr':
@@ -216,8 +216,6 @@ def main(data, labels, type):
         print("ERROR: no proper model type specified, please specify 'NN' or 'KRR'.")
 
     # predict
-    print(type(x_test[1]))
-    print(type(y_test[1]))
     loss, y_predict_test = inference(model=model, type = type.lower(), x_test=x_test, y_test=y_test)
 
     # results
