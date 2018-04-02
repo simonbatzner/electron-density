@@ -187,16 +187,17 @@ def main():
     parser.add_argument('--summary', type=bool, default=False)
     args = parser.parse_args()
 
+    if not (args.type.lower() == 'nn' or args.type.lower() == 'krr'):
+        raise ValueError("model type must be either 'nn' or 'krr'")
+
+    if not 0 <= args.test_size <= 1:
+        raise ValueError('test size must be in [0, 1]')
+
     # load DFT output data from file into list of Systems objects
     systems = load_data(args.input_dir, train_min=args.train_min, train_max=args.train_max)
 
     # define input and labels
     data, labels = setup_data(systems)
-
-    # split data into training/validation and test
-    if not 0 <= args.test_size <= 1:
-        print("Parameter test_size must be in [0, 1]")
-        sys.exit(0)
 
     x_trainval, x_test, y_trainval, y_test = train_test_split(data, labels, test_size=args.test_size, random_state=seed)
 
@@ -210,7 +211,6 @@ def main():
         model = init_architecture(input_dim=data[1].shape[0], hidden_size=tuple(args.hidden), summary=args.summary,
                                   activation=args.activation)
         set_loss(model=model, loss='mean_squared_error', optimizer='Adam', metrics=['mse'])
-
 
         # train NN
         for train_index, val_index in kf.split(x_trainval):
@@ -228,9 +228,6 @@ def main():
                                          "gamma": np.logspace(-2, 2, 10)})
 
         model.fit(x_trainval, y_trainval)
-
-    else:
-        print("ERROR: no proper model type specified, please specify 'NN' or 'KRR'.")
 
     # predict
     loss, y_predict_test = inference(model=model, type=args.type.lower(), x_test=x_test, y_test=y_test)
