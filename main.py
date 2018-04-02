@@ -187,7 +187,7 @@ def main():
     parser.add_argument('--summary', type=bool, default=False)
     args = parser.parse_args()
 
-    if not ((args.type.lower() == 'nn' or args.type.lower() == 'krr')):
+    if not (args.type.lower() == 'nn' or args.type.lower() == 'krr'):
         raise ValueError("model type must be either 'nn' or 'krr'")
 
     if not 0 <= args.test_size <= 1:
