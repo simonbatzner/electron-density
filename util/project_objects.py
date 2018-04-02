@@ -46,5 +46,24 @@ class Potential_Function(Discrete_Function_1D):
 		super().__init__(xmin, xmax, mesh, **kwargs)
 
 
+class ESPRESSO_Output(Path):
+		
+	pass
 
 
+
+class PP_Plot_Vectors(Param):
+    """
+    Data class describing the shape of the vectors used for density writing in the PP.x code
+    Example: {'e(1)': [1.0, 0.0, 0.0'], e(2) [0.0, 1.0, 0.0]...}
+	"""
+	
+    pass
+
+
+
+class PW_PP_inparam(Param):
+	"""
+	Data class containing parameters for a Quantum Espresso Post-Processing calculation
+	"""
+	pass

@@ -74,6 +74,8 @@ class Constraint(Param):
     pass
 
 
+
+
 class Struc(Param):
     """
     Data class containing information about a structure
@@ -174,7 +176,3 @@ def ase2struc(ase_atoms):
 
 def struc2ase(struc):
     return Struc.to_ase(struc)
-
-################################ New Code for Project Below
-
-
