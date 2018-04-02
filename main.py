@@ -40,6 +40,7 @@ from sklearn.model_selection import train_test_split
 from ase.io import read
 from sklearn.model_selection import GridSearchCV
 from sklearn.kernel_ridge import KernelRidge
+from sklearn.datasets import load_boston
 from sklearn.metrics import mean_squared_error
 from math import sqrt
 
@@ -170,50 +171,30 @@ def inference(model, type, x_test, y_test):
     return loss, y_predict_test
 
 
-def main():
+def main(data, labels, model):
     seed = 42
-
-    # arguments
-    parser = argparse.ArgumentParser(
-        description='Machine Learning the ground-state charge density')
-    parser.add_argument('--input_dir', type=str, default='./')
-    parser.add_argument('--model', type=str, default='')
-    parser.add_argument('--output_dir', type=str, required=True)
-    parser.add_argument('--hidden', nargs='+', type=int)
-    parser.add_argument('--nfolds', type=int, default=5)
-    parser.add_argument('--train_min', type=int, default=1)
-    parser.add_argument('--train_max', type=int, default=1)
-    parser.add_argument('--test_size', type=float, default=0.2)
-    parser.add_argument('--summary', type=bool, default=False)
-    args = parser.parse_args()
-
-    # load DFT output data from file into list of Systems objects
-    systems = load_data(args.input_dir, train_min=args.train_min, train_max=args.train_max)
-
-    # define input and labels
-    data, labels = setup_data(systems)
-
-    # split data into training/validation and test
-    if not 0 <= args.test_size <= 1:
-        print("Parameter test_size must be in [0, 1]")
-        sys.exit(0)
-
-    x_trainval, x_test, y_trainval, y_test = train_test_split(data, labels, test_size=args.test_size, random_state=seed)
+    test_size = 0.2
+    nfolds = 5
+    hidden = [30, 30]
+    summary = True
+    activation = 'relu'
+    output_dir = '.'
+    x_trainval, x_test, y_trainval, y_test = train_test_split(data, labels, test_size=test_size, random_state=seed)
 
     # split trainval into training and validation data
     # k-fold cross-validation, each fold is used once as a validation while the k - 1 remaining are used for training
-    kf = KFold(n_splits=args.nfolds, shuffle=True, random_state=seed)
+    kf = KFold(n_splits=nfolds, shuffle=True, random_state=seed)
     history = []
 
     # NEURAL NETWORK
-    if args.model.lower() == 'nn':
-        model = init_architecture(input_dim=data[1].shape, hidden_size=tuple(args.hidden), summary=args.summary,
-                                  activation=args.activation)
+    if model.lower() == 'nn':
+        model = init_architecture(input_dim=data[1].shape, hidden_size=tuple(hidden), summary=summary,
+                                  activation=activation)
         set_loss(model=model, loss='mean_squared_error', optimizer='Adam', metrics=['mse'])
 
         # save image of model architecture to file
         plot_model(model, show_shapes=True,
-                   to_file=os.path.join(args.output_dir, 'model.png'))
+                   to_file=os.path.join(output_dir, 'model.png'))
 
         # train NN
         for train_index, val_index in kf.split(x_trainval):
@@ -224,9 +205,9 @@ def main():
 
 
     # KERNEL RIDGE REGRESSION
-    elif args.model.lower() == 'krr':
+    elif model.lower() == 'krr':
 
-        model = GridSearchCV(KernelRidge(kernel='rbf', gamma=0.1), cv=args.nfolds,
+        model = GridSearchCV(KernelRidge(kernel='rbf', gamma=0.1), cv=nfolds,
                              param_grid={"alpha": [1, 0.1, 0.01, 0.01],
                                          "gamma": np.logspace(-2, 2, 10)})
 
@@ -236,7 +217,7 @@ def main():
         print("ERROR: no proper model type specified, please specify 'NN' or 'KRR'.")
 
     # predict
-    loss, y_predict_test = inference(model=model, type=args.model.lower(), x_test=x_test, y_test=y_test)
+    loss, y_predict_test = inference(model=model, type=model.lower(), x_test=x_test, y_test=y_test)
 
     # results
     print("Test loss: {}".format(loss))
@@ -251,4 +232,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    model = 'NN'
+
+    # test ML model on boston house prices data set
+    data, labels = load_boston(return_X_y=True)
+    main(data=data, labels=labels, model=model)
