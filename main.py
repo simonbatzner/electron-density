@@ -160,7 +160,7 @@ def inference(model, type, x_test, y_test):
 
     # SIMON: -- TEST EQUIVALENCY OF KERAS RMSE METRIC AND SELF-IMPLEMENTED
     if type == 'nn':
-        loss = sqrt(model.evaluate(x_test, y_test, verbose=2))
+        loss = sqrt(model.evaluate(x_test, y_test, verbose=2)[1])
         y_predict_test = model.predict(x_test, verbose=2)
 
     elif type == 'krr':
@@ -242,7 +242,7 @@ def main():
     plt.plot(x_test, y_test)
     plt.plot(x_test, y_predict_test)
     plt.xlabel('input')
-    plt.ylabel('targetl')
+    plt.ylabel('target')
     plt.title('True vs Prediction on test data')
     plt.savefig('Test_Pred')
 
