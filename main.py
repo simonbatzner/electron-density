@@ -175,7 +175,7 @@ def main():
 
     # arguments
     parser = argparse.ArgumentParser(
-        description='Learning the ground-state charge density')
+        description='Machine Learning the ground-state charge density')
     parser.add_argument('--input_dir', type=str, default='./')
     parser.add_argument('--model', type=str, default='')
     parser.add_argument('--output_dir', type=str, required=True)
@@ -197,6 +197,7 @@ def main():
     if not 0 <= args.test_size <= 1:
         print("Parameter test_size must be in [0, 1]")
         sys.exit(0)
+
     x_trainval, x_test, y_trainval, y_test = train_test_split(data, labels, test_size=args.test_size, random_state=seed)
 
     # split trainval into training and validation data
@@ -232,7 +233,7 @@ def main():
         model.fit(x_trainval, y_trainval)
 
     else:
-        print("ERROR: no proper model specified, please specify 'NN' or 'KRR'.")
+        print("ERROR: no proper model type specified, please specify 'NN' or 'KRR'.")
 
     # predict
     loss, y_predict_test = inference(model=model, type=args.model.lower(), x_test=x_test, y_test=y_test)
