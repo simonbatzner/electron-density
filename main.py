@@ -26,8 +26,9 @@ from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
 from ase.io import read
 from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import learning_curve
 from sklearn.kernel_ridge import KernelRidge
+from sklearn.metrics import mean_squared_error
+from math import sqrt
 
 
 class System(object):
@@ -141,15 +142,19 @@ def train(model, training_data, training_labels, validation_data, validation_lab
 
 def inference(model, type, x_test, y_test):
     """"
-    Compute and print test accuracy using trained model
+    Compute test loss RMSE and predicted targets using trained model
     """
+
+    # SIMON: -- TEST EQUIVALENCY OF KERAS RMSE METRIC AND SELF-IMPLEMENTED
     if type == 'nn':
-        loss, acc = model.evaluate(x_test, y_test, verbose=0)
+        loss = sqrt(model.evaluate(x_test, y_test, verbose=2))
+        y_predict_test = model.predict(x_test, verbose=2)
+
     elif type == 'krr':
         y_predict_test = model.predict(x_test)
-        #loss, acc =
+        loss = sqrt(mean_squared_error(y_test, y_predict_test))
 
-    return loss, acc
+    return loss, y_predict_test
 
 
 def main():
@@ -188,7 +193,7 @@ def main():
     if args.model.lower() == 'nn':
         model = init_architecture(input_dim=data[1].shape, hidden_size=args.hidden, summary=args.summary,
                                   activation=args.activation)
-        set_loss(model=model, loss='mean_squared_error', optimizer='Adam')
+        set_loss(model=model, loss='mean_squared_error', optimizer='Adam', metrics=['mse'])
 
         # save image of model architecture to file
         plot_model(model, show_shapes=True,
@@ -215,11 +220,18 @@ def main():
         print("ERROR: no proper model specified, please specify 'NN' or 'KRR'.")
 
     # predict
-    loss, acc = inference(model=model, type=args.model.lower(), x_test=x_test, y_test=y_test)
+    loss, y_predict_test = inference(model=model, type=args.model.lower(), x_test=x_test, y_test=y_test)
 
     # results
-    print("Test accuracy: {}".format(acc))
     print("Test loss: {}".format(loss))
+
+    # plot
+    plt.plot(x_test, y_test)
+    plt.plot(x_test, y_predict_test)
+    plt.xlabel('input')
+    plt.ylabel('targetl')
+    plt.title('True vs Prediction on test data')
+    plt.savefig('Test_Pred')
 
 
 if __name__ == "__main__":
