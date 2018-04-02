@@ -5,7 +5,7 @@
     # Arguments
 
         input_dir: directory containing subdirectories of files
-        model: neural network of kernel ridge regression model, specify: 'nn' or 'krr'
+        type: neural network of kernel ridge regression model, specify: 'nn' or 'krr'
         output_dir: directory to write figures and output data to
         hidden: list or tuple containing neural network architecture, e.g. [30, 30] creates a neural network w/ 2 layers a 30 neurons
         nfolds: int, number of folds for k-fold cross validation
@@ -124,7 +124,7 @@ def init_architecture(input_shape, hidden_size, summary, activation='relu'):
     :return: keras Sequential model
     """
     model = Sequential()
-    model.add(Dense(hidden_size[0], input_dim=input_shape[1], activation=activation))
+    model.add(Dense(hidden_size[0], input_dim=input_shape, activation=activation))
     for layer_size in hidden_size[1:]:
         model.add(Dense(layer_size, activation=activation))
         model.add(Dense(1, activation='sigmoid'))
@@ -135,11 +135,11 @@ def init_architecture(input_shape, hidden_size, summary, activation='relu'):
     return model
 
 
-def set_loss(model, loss, optimizer):
+def set_loss(model, loss, optimizer, metrics):
     """"
     Set loss function, optimizer (add metric for classification tasks)
     """
-    model.compile(optimizer=optimizer, loss=loss)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
     return model
 
 
@@ -177,7 +177,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Machine Learning the ground-state charge density')
     parser.add_argument('--input_dir', type=str, default='./')
-    parser.add_argument('--model', type=str, default='')
+    parser.add_argument('--type', type=str, default='')
     parser.add_argument('--output_dir', type=str, required=True)
     parser.add_argument('--hidden', nargs='+', type=int)
     parser.add_argument('--nfolds', type=int, default=5)
@@ -206,14 +206,11 @@ def main():
     history = []
 
     # NEURAL NETWORK
-    if args.model.lower() == 'nn':
-        model = init_architecture(input_dim=data[1].shape, hidden_size=tuple(args.hidden), summary=args.summary,
+    if args.type.lower() == 'nn':
+        model = init_architecture(input_dim=data[1].shape[0], hidden_size=tuple(args.hidden), summary=args.summary,
                                   activation=args.activation)
         set_loss(model=model, loss='mean_squared_error', optimizer='Adam', metrics=['mse'])
 
-        # save image of model architecture to file
-        plot_model(model, show_shapes=True,
-                   to_file=os.path.join(args.output_dir, 'model.png'))
 
         # train NN
         for train_index, val_index in kf.split(x_trainval):
@@ -224,7 +221,7 @@ def main():
 
 
     # KERNEL RIDGE REGRESSION
-    elif args.model.lower() == 'krr':
+    elif args.type.lower() == 'krr':
 
         model = GridSearchCV(KernelRidge(kernel='rbf', gamma=0.1), cv=args.nfolds,
                              param_grid={"alpha": [1, 0.1, 0.01, 0.01],
@@ -236,7 +233,7 @@ def main():
         print("ERROR: no proper model type specified, please specify 'NN' or 'KRR'.")
 
     # predict
-    loss, y_predict_test = inference(model=model, type=args.model.lower(), x_test=x_test, y_test=y_test)
+    loss, y_predict_test = inference(model=model, type=args.type.lower(), x_test=x_test, y_test=y_test)
 
     # results
     print("Test loss: {}".format(loss))
