@@ -124,7 +124,7 @@ def init_architecture(input_shape, hidden_size, summary, activation='relu'):
     :return: keras Sequential model
     """
     model = Sequential()
-    model.add(Dense(hidden_size[0], input_dim=input_shape[1], activation=activation))
+    model.add(Dense(hidden_size[0], input_dim=input_shape, activation=activation))
     for layer_size in hidden_size[1:]:
         model.add(Dense(layer_size, activation=activation))
         model.add(Dense(1, activation='sigmoid'))
@@ -135,11 +135,11 @@ def init_architecture(input_shape, hidden_size, summary, activation='relu'):
     return model
 
 
-def set_loss(model, loss, optimizer):
+def set_loss(model, loss, optimizer, metrics):
     """"
     Set loss function, optimizer (add metric for classification tasks)
     """
-    model.compile(optimizer=optimizer, loss=loss)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
     return model
 
 
@@ -207,13 +207,10 @@ def main():
 
     # NEURAL NETWORK
     if args.type.lower() == 'nn':
-        model = init_architecture(input_dim=data[1].shape, hidden_size=tuple(args.hidden), summary=args.summary,
+        model = init_architecture(input_dim=data[1].shape[0], hidden_size=tuple(args.hidden), summary=args.summary,
                                   activation=args.activation)
         set_loss(model=model, loss='mean_squared_error', optimizer='Adam', metrics=['mse'])
 
-        # save image of model architecture to file
-        plot_model(model, show_shapes=True,
-                   to_file=os.path.join(args.output_dir, 'model.png'))
 
         # train NN
         for train_index, val_index in kf.split(x_trainval):
