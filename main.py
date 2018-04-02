@@ -195,7 +195,7 @@ def main(data, labels, type):
 
 
 
-        # train NN
+        # train neural net
         for train_index, val_index in kf.split(x_trainval):
             history.append(
                 train(model=model, training_data=x_trainval[train_index], training_labels=y_trainval[train_index],
