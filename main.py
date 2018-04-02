@@ -224,8 +224,6 @@ def main(data, labels, type):
     # plot
     plt.plot(x_test, y_test)
     plt.plot(x_test, y_predict_test)
-    plt.xlabel('input')
-    plt.ylabel('targetl')
     plt.title('True vs Prediction on test data')
     plt.savefig('Test_Pred')
 
