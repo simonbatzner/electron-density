@@ -5,7 +5,7 @@
     # Arguments
 
         input_dir: directory containing subdirectories of files
-        model: neural network of kernel ridge regression model, specify: 'nn' or 'krr'
+        model_type: neural network of kernel ridge regression model, specify: 'nn' or 'krr'
         output_dir: directory to write figures and output data to
         hidden: list or tuple containing neural network architecture, e.g. [30, 30] creates a neural network w/ 2 layers a 30 neurons
         nfolds: int, number of folds for k-fold cross validation
@@ -125,7 +125,7 @@ def init_architecture(input_shape, hidden_size, summary, activation='relu'):
     :return: keras Sequential model
     """
     model = Sequential()
-    model.add(Dense(hidden_size[0], input_dim=input_shape[1], activation=activation))
+    model.add(Dense(hidden_size[0], input_dim=input_shape, activation=activation))
     for layer_size in hidden_size[1:]:
         model.add(Dense(layer_size, activation=activation))
         model.add(Dense(1, activation='sigmoid'))
@@ -136,11 +136,11 @@ def init_architecture(input_shape, hidden_size, summary, activation='relu'):
     return model
 
 
-def set_loss(model, loss, optimizer):
+def set_loss(model, loss, optimizer, metrics):
     """"
     Set loss function, optimizer (add metric for classification tasks)
     """
-    model.compile(optimizer=optimizer, loss=loss)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
     return model
 
 
@@ -171,7 +171,7 @@ def inference(model, type, x_test, y_test):
     return loss, y_predict_test
 
 
-def main(data, labels, model):
+def main(data, labels, type):
     seed = 42
     test_size = 0.2
     nfolds = 5
@@ -187,8 +187,9 @@ def main(data, labels, model):
     history = []
 
     # NEURAL NETWORK
-    if model.lower() == 'nn':
-        model = init_architecture(input_dim=data[1].shape, hidden_size=tuple(hidden), summary=summary,
+    if type.lower() == 'nn':
+        print(data[1].shape)
+        model = init_architecture(input_shape=data[1].shape[0], hidden_size=tuple(hidden), summary=summary,
                                   activation=activation)
         set_loss(model=model, loss='mean_squared_error', optimizer='Adam', metrics=['mse'])
 
@@ -205,7 +206,7 @@ def main(data, labels, model):
 
 
     # KERNEL RIDGE REGRESSION
-    elif model.lower() == 'krr':
+    elif type.lower() == 'krr':
 
         model = GridSearchCV(KernelRidge(kernel='rbf', gamma=0.1), cv=nfolds,
                              param_grid={"alpha": [1, 0.1, 0.01, 0.01],
@@ -217,7 +218,7 @@ def main(data, labels, model):
         print("ERROR: no proper model type specified, please specify 'NN' or 'KRR'.")
 
     # predict
-    loss, y_predict_test = inference(model=model, type=model.lower(), x_test=x_test, y_test=y_test)
+    loss, y_predict_test = inference(model=model, type = type.lower(), x_test=x_test, y_test=y_test)
 
     # results
     print("Test loss: {}".format(loss))
@@ -236,4 +237,4 @@ if __name__ == "__main__":
 
     # test ML model on boston house prices data set
     data, labels = load_boston(return_X_y=True)
-    main(data=data, labels=labels, model=model)
+    main(data=data, labels=labels, type = model)
