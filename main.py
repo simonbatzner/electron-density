@@ -2,18 +2,31 @@
 
 """" ML mapping from external potential to charge density - AP275 Class Project, Harvard University
 
-References:
-    [1] Brockherde et al. Bypassing the Kohn-Sham equations with machine learning. Nature Communications 8, 872 (2017)
-    [2] KRR work based on http://scikit-learn.org/stable/auto_examples/plot_kernel_ridge_regression.html#sphx-glr-auto-examples-plot-kernel-ridge-regression-py (Jan Hendrik Metzen <jhm@informatik.uni-bremen.de>)
+    # Arguments
+
+        input_dir: directory containing subdirectories of files
+        model: neural network of kernel ridge regression model, specify: 'nn' or 'krr'
+        output_dir: directory to write figures and output data to
+        hidden: list or tuple containing neural network architecture, e.g. [30, 30] creates a neural network w/ 2 layers a 30 neurons
+        nfolds: int, number of folds for k-fold cross validation
+        train_min: int, first subdirectory to read files from
+        train_max: int, last subdirectory to read files from
+        test_size: float in [0, 1], ratio of test to overall data
+        summary: bool, yes or no to display summary of neural network architecture
+
+    # References:
+        [1] Brockherde et al. Bypassing the Kohn-Sham equations with machine learning. Nature Communications 8, 872 (2017)
+        [2] KRR work based on http://scikit-learn.org/stable/auto_examples/plot_kernel_ridge_regression.html#sphx-glr-auto-examples-plot-kernel-ridge-regression-py (Jan Hendrik Metzen <jhm@informatik.uni-bremen.de>)
 
 Simon Batzner, Steven Torrisi, Jon Vandermause
+
 """
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
+import os, sys
 import argparse
 
 import numpy as np
@@ -171,7 +184,6 @@ def main():
     parser.add_argument('--train_min', type=int, default=1)
     parser.add_argument('--train_max', type=int, default=1)
     parser.add_argument('--test_size', type=float, default=0.2)
-    parser.add_argument('--hidden', nargs='+', type=int)
     parser.add_argument('--summary', type=bool, default=False)
     args = parser.parse_args()
 
@@ -182,6 +194,9 @@ def main():
     data, labels = setup_data(systems)
 
     # split data into training/validation and test
+    if not 0 <= args.test_size <= 1:
+        print("Parameter test_size must be in [0, 1]")
+        sys.exit(0)
     x_trainval, x_test, y_trainval, y_test = train_test_split(data, labels, test_size=args.test_size, random_state=seed)
 
     # split trainval into training and validation data
@@ -191,7 +206,7 @@ def main():
 
     # NEURAL NETWORK
     if args.model.lower() == 'nn':
-        model = init_architecture(input_dim=data[1].shape, hidden_size=args.hidden, summary=args.summary,
+        model = init_architecture(input_dim=data[1].shape, hidden_size=tuple(args.hidden), summary=args.summary,
                                   activation=args.activation)
         set_loss(model=model, loss='mean_squared_error', optimizer='Adam', metrics=['mse'])
 
@@ -211,8 +226,8 @@ def main():
     elif args.model.lower() == 'krr':
 
         model = GridSearchCV(KernelRidge(kernel='rbf', gamma=0.1), cv=args.nfolds,
-                             param_grid={"alpha": [1e0, 0.1, 1e-2, 1e-3],
-                                         "gamma": np.logspace(-2, 2, 5)})
+                             param_grid={"alpha": [1, 0.1, 0.01, 0.01],
+                                         "gamma": np.logspace(-2, 2, 10)})
 
         model.fit(x_trainval, y_trainval)
 
