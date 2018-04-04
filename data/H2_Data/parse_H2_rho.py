@@ -24,12 +24,16 @@ def rho_to_numpy(file_path,natoms=2):
 	## ASSUMING CUBIC LATTICE FOR NOW/MOLECULE
 	nx = int(header[3].split()[0])
 	dx = float(header[3].split()[1])
+	print(dx)
+    
 	
 	ny = int(header[4].split()[0])
-	dy = float(header[4].split()[1])
+	dy = float(header[4].split()[2])
+	print(dy)
 	
 	nz = int(header[5].split()[0])
-	dz = float(header[5].split()[1])
+	dz = float(header[5].split()[3])
+	print(dz)
 
 	
 	array=np.empty(shape=(nx,ny,nz))
@@ -54,19 +58,19 @@ def rho_to_numpy(file_path,natoms=2):
 
 	return array
 
-if __name__=="__main__":
-	
-	
-	spacings= np.linspace(0.25483192,3,20)
-	ecut=70
-	
-	test_rho='/Users/steven/Documents/Schoolwork/CDMAT275/MLED/ML-electron-density/data/H2_Data/rho_data/H2_a_0.25483192_ecut_70.rho.dat'
-	
-	array=rho_to_numpy(test_rho)
-	print(array.shape)
-
-	print(array[0,0,0])
-	print(np.sum(array) *0.177162**3)
+#if __name__=="__main__":
+#	
+#	
+#	spacings= np.linspace(0.25483192,3,20)
+#	ecut=70
+#	
+#	test_rho='/Users/steven/Documents/Schoolwork/CDMAT275/MLED/ML-electron-density/data/H2_Data/rho_data/H2_a_0.25483192_ecut_70.rho.dat'
+#	
+#	array=rho_to_numpy(test_rho)
+#	print(array.shape)
+#
+#	print(array[0,0,0])
+#	print(np.sum(array) *0.177162**3)
 
 	
 	

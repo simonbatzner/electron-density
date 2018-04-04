@@ -20,25 +20,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def make_struc(alat=1.5,vacuum=5.0,dimer=False):
-	"""
-	Creates the crystal structure using ASE.
-	:param alat: Lattice parameter in angstrom
-	:return: structure object converted from ase
-	"""
-	center=vacuum
-	
-	if not dimer:
+    center=vacuum
+    
+    	
+    if not dimer:
 		#H=Atoms('H', positions=[(0,0,0)])
-		H=molecule("H",vacuum=vacuum)
-		H.positions=[[center,center,center]]
-	else:
-		H=molecule("H2",vacuum=vacuum)
-		H.positions=[[center-alat/2.,center,center],[alat/2.+center,center,center]]
-
-	# check how your cell looks like
-	#write('s.cif', gecell)
-	structure = Struc(ase2struc(H))
-	return structure
+        H=molecule("H",vacuum=vacuum)
+        H.positions=[[center,center,center]]
+    else:
+        H=molecule("H2",vacuum=vacuum)
+        H.cell=[vacuum*2,vacuum*2,vacuum*2]
+        H.positions=[[center-alat/2.,center,center],[alat/2.+center,center,center]]
+    
+    	# check how your cell looks like
+    	#write('s.cif', gecell)
+    structure = Struc(ase2struc(H))
+    return structure
 
 
 
@@ -62,7 +59,7 @@ def compute_H_energy(ecut=90,alat=.75,vacuum=5.29,relax=False,verbose=False,dime
 	constraint = Constraint(atoms={'0': [1,0,0], '1':[1,0,0]})
 
 	dirname = '{}_a_{}_ecut_{}'.format('H2' if dimer else 'H',alat if dimer else 0, ecut)
-	runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "data/H2_DFT/test_data", dirname))
+	runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "data/H2_DFT/temp_data", dirname))
 	input_params = PWscf_inparam({
 		'CONTROL': {
 				   'prefix': 'H2' if dimer else 'H', #+str(alat) if dimer else 'H'+str(alat),
@@ -181,7 +178,7 @@ def quick_density_gen(strain_vals,ecut,verbose=True):
 		input_text="""
 		 &inputpp
 		    prefix  = 'H2'
-			outdir = """+work_dir.path+'/'+dirname + """'
+			outdir = '"""+work_dir.path+'/'+dirname + """'
 			filplot = './"""+dirname+"""/H2rho'
 		    plot_num= 0
 		 /
@@ -207,7 +204,7 @@ def quick_density_gen(strain_vals,ecut,verbose=True):
 		
 		
 		
-if __name__=='__main__':
+#if __name__=='__main__':
 	
 	## I found the equilibrium spacing to be .7504 anstrom, which is not far off from the
 	## experimental value of .74.
@@ -215,9 +212,9 @@ if __name__=='__main__':
 #	print(compute_H_energy(alat=.75, ecut=90, dimer=True, relax=True, vacuum=5))
 
 	## Determine the spacings to use and iterate:
-	spacings= np.linspace(.5,1.5,10)
-	spacing_outs=[ compute_H_energy(alat=a, ecut=90, dimer=True,relax=False,verbose=True) for a in spacings]
-	plt.plot(spacings, [out['energy'] for out in spacing_outs])
+#	spacings= np.linspace(.5,1.5,10)
+#	spacing_outs=[ compute_H_energy(alat=a, ecut=90, dimer=True,relax=False,verbose=True) for a in spacings]
+#	plt.plot(spacings, [out['energy'] for out in spacing_outs])
 
 #	plt.figure()
 #	plt.show()
