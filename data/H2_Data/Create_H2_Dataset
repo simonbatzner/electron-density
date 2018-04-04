@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Apr  4 13:36:08 2018
+
+@author: jonpvandermause
+"""
+import numpy as np
+import scipy as sp
+from scipy.fftpack import *
+from generate_H2_data import *
+from parse_H2_rho import *
+
+# set H2 parameters
+alats = np.linspace(0.5,1.5,150)
+vacuum = 5.29177
+ecut = 90
+
+# loop through separations
+for n in range(len(alats)):
+    alat = alats[n]
+    
+    # calculate the energy
+    en = compute_H_energy(ecut=ecut,alat=alat,vacuum=vacuum,relax=False,\
+                     verbose=False,dimer=True, ncpu=16)
+
+    # calculate the density
+    quick_density_gen(strain_vals=[alat], ecut = ecut,verbose=False)
+
+    # parse the density file
+    dirname = '{}_a_{}_ecut_{}'.format('H2',alat,ecut)
+    file_path = os.environ['PROJDIR']+'/data/H2_DFT/temp_data/'+dirname+'/H2.rho.dat'
+    dens = rho_to_numpy(file_path,natoms=2)
+
+    # take the fourier transform
+    four = sp.fftpack.fftn(dens)
+
+    # form grid of 25x25x25 fourier coefficients
+    four_store = four[0:25, 0:25, 0:25]
+    
+    np.save('./store/sep_store/sep'+str(n),alat)
+    np.save('./store/four_store/four'+str(n),four_store)
+    np.save('./store/dens_store/dens'+str(n),dens)
+    
+    print(n)

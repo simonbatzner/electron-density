@@ -40,7 +40,8 @@ def make_struc(alat=1.5,vacuum=5.0,dimer=False):
 
 
 
-def compute_H_energy(ecut=90,alat=.75,vacuum=5.29,relax=False,verbose=False,dimer=False):
+def compute_H_energy(ecut=90,alat=.75,vacuum=5.29,relax=False,\
+                     verbose=False,dimer=False,ncpu=1):
 	"""
 	Make an input template and select potential and structure, and the path where to run
 	"""	
@@ -92,7 +93,7 @@ def compute_H_energy(ecut=90,alat=.75,vacuum=5.29,relax=False,verbose=False,dime
 
 	output_file = run_qe_pwscf(runpath=runpath, struc=struc,  pseudopots=pseudopots,
 							   params=input_params, kpoints=kpts,constraint=constraint,
-							    ncpu=1)
+							    ncpu=ncpu)
 	output = parse_qe_pwscf_output(outfile=output_file)
 	if verbose:
 		print("Done with run with ",alat,ecut)
@@ -154,7 +155,7 @@ def quick_density_gen(strain_vals,ecut,verbose=True):
 	os.chdir(work_dir.path)
 
 	for val in strain_vals:
-		print("Converting the output density of ",val, " to real-space density ")
+#		print("Converting the output density of ",val, " to real-space density ")
 		
 		dirname = '{}_a_{}_ecut_{}'.format('H2', val,ecut)
 		
@@ -199,7 +200,7 @@ def quick_density_gen(strain_vals,ecut,verbose=True):
 		with open('H2_rho_temp.pp','w') as f:
 			f.write(input_text)
 		os.system( os.environ["PP_COMMAND"] + " < h2_rho_temp.pp")
-		print(os.environ["PP_COMMAND"]+ ( " < h2_rho_temp.pp"))
+#		print(os.environ["PP_COMMAND"]+ ( " < h2_rho_temp.pp"))
 		os.system("cp ./"+dirname+"/H2.rho.dat ../out_data/"+dirname+".rho.dat")
 		
 		

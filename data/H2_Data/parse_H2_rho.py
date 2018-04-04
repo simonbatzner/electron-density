@@ -5,7 +5,7 @@ Created on Mon Apr  2 16:13:18 2018
 
 @author: steven
 """
-import numpy
+import numpy as np
 
 
 def rho_to_numpy(file_path,natoms=2):
@@ -24,23 +24,20 @@ def rho_to_numpy(file_path,natoms=2):
 	## ASSUMING CUBIC LATTICE FOR NOW/MOLECULE
 	nx = int(header[3].split()[0])
 	dx = float(header[3].split()[1])
-	print(dx)
     
 	
 	ny = int(header[4].split()[0])
 	dy = float(header[4].split()[2])
-	print(dy)
 	
 	nz = int(header[5].split()[0])
 	dz = float(header[5].split()[3])
-	print(dz)
 
 	
 	array=np.empty(shape=(nx,ny,nz))
 	body_index=0
 	cur_line=body[body_index].split()
-	print(cur_line)
-	print(nx,ny,nz)
+#	print(cur_line)
+#	print(nx,ny,nz)
 	for x in range(nx):
 		for y in range(ny):
 			for z in range(nz):
