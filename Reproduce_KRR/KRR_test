@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Apr  4 16:46:04 2018
+
+@author: jonpvandermause
+"""
+
+import os
+import numpy as np
+from KRR_reproduce import *
+import matplotlib.pyplot as plt
+
+# test a KRR model
+str_pref = os.environ['PROJDIR']+'/data/H2_DFT/temp_data/store/'
+test = np.load(os.environ['PROJDIR']+'/data/H2_DFT/temp_data/store/sep_store/sep149.npy')
+
+
+# read in the calculation data
+sim_no = 150
+ens = []
+seps= []
+fours = []
+
+for n in range(sim_no):
+    # load separation, energy, and density
+     sep = np.load(str_pref+'sep_store/sep'+str(n)+'.npy')
+     en = np.load(str_pref+'en_store/en'+str(n)+'.npy')
+     four = np.load(str_pref+'four_store/four'+str(n)+'.npy')
+     
+     # put results in a nicer format
+     sep = np.reshape(sep,(1,))[0]
+     en = np.reshape(en,(1,))[0]['energy']
+     four = np.real(four)
+     
+     # store quantities
+     ens.append(en)
+     seps.append(sep)
+     fours.append(four)
+
+figure = plt.figure()
+ax = figure.add_subplot(1,1,1)
+ax.plot(seps, ens)
+    
+# create list of gaussian potentials
+pots = []
+grid_len = 5.29177*2
+
+for n in range(sim_no):
+    dist = seps[n]
+    pot = pot_rep(dist, grid_len)
+    pots.append(pot)
+    
+# get kernel matrix
+sig = 1
+kern = get_kern_mat(pots, sig)
+
+# specify fourier component to model
+four1 = 0
+four2 = 0
+four3 = 3
+data_vec = []
+
+for n in range(sim_no):
+    comp = fours[n][four1, four2, four3]
+    data_vec.append(comp)
+
+plt.plot(data_vec)
+plt.show()
+
+# build the model
+test_ind = 10
+lam = 0
+test = get_beta(kern, data_vec, lam=lam)
+
+pot_test = pots[test_ind]
+pred_test=pred_four(pot_test,pots,test,sig=1)
+print(pred_test)
+print(fours[test_ind][0,0,3])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

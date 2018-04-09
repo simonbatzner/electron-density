@@ -7,6 +7,7 @@ Created on Sun Apr  1 14:56:25 2018
 """
 
 import numpy as np
+from numpy.linalg import inv
 
 # represent potential as an artificial gaussian
 # takes spacing between H atoms (angstrom), grid length (angstrom),
@@ -36,7 +37,7 @@ def pot_rep(dist, grid_len, grid_space=0.08):
     dist2 = (xv-pos2)**2+yv**2+zv**2
     gauss = np.exp(-dist1 / (2*gam**2))+np.exp(-dist2 / (2*gam**2))
     
-    return xv, yv, zv, gauss
+    return gauss
 
 # get the kernel between two gaussian potentials
 # sigma chosen by cross validation
@@ -47,4 +48,44 @@ def get_kern(v1, v2, sig):
     # use gaussian kernel
     kern = np.exp(-dist/(2*sig**2))
     
-    return dist, kern
+    return kern
+
+# given a set of potentials, construct kernel matrix
+# assume potentials are given as a list of numpy arrays
+def get_kern_mat(pots, sig):
+    no_pots = len(pots)
+    kern_mat = np.empty([no_pots, no_pots])
+    
+    for m in range(no_pots):
+        pot_m = pots[m]
+        
+        for n in range(no_pots):
+            pot_n = pots[n]
+            
+            kern_mat[m, n]=get_kern(pot_m, pot_n, sig)
+            
+    return kern_mat
+            
+# calculate optimal KRR model
+def get_beta(kern_mat, data_vec, lam):
+    dim = kern_mat.shape[0]
+    in_mat = kern_mat + lam * np.eye(dim)
+    inv_mat = inv(in_mat)
+    beta = np.matmul(inv_mat, data_vec)
+    
+    return beta
+
+# predict fourier coefficient
+def pred_four(pot,pots,beta,sig):
+    four_pred = 0
+    
+    for n in range(len(pots)):
+        pot_curr = pots[n]
+        dist = get_kern(pot, pot_curr, sig)
+        four_pred = four_pred + dist * beta[n]
+        
+    return four_pred
+            
+            
+        
+    
