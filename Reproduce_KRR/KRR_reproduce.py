@@ -46,7 +46,7 @@ def get_kern(v1, v2, sig):
     dist = np.linalg.norm(v1-v2)
     
     # use gaussian kernel
-    kern = np.exp(-dist/(2*sig**2))
+    kern = np.exp(-dist**2/(2*sig**2))
     
     return kern
 
@@ -85,6 +85,24 @@ def pred_four(pot,pots,beta,sig):
         four_pred = four_pred + dist * beta[n]
         
     return four_pred
+
+def get_dist(pot,pots,sig):
+    dists = []
+    for n in range(len(pots)):
+        pot_curr = pots[n]
+        dist = get_kern(pot, pot_curr, sig)
+        dists.append(dist)
+        
+    return dists
+        
+
+def pred_fast(dist,beta):
+    pred = 0
+    
+    for n in range(len(dist)):
+        pred += dist[n]*beta[n]
+        
+    return pred
             
             
         
