@@ -13,6 +13,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import json
+import os
 
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
@@ -23,7 +25,7 @@ from sklearn.datasets import load_boston
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestRegressor
 from KRR_reproduce import *
-from generate_H2_data import *
+# from generate_H2_data import *
 
 
 def load_data():
@@ -83,25 +85,24 @@ def main():
     # reg = GridSearchCV(RandomForestRegressor(), param_grid={"n_estimators": [10, 20, 50, 100, 200, 500, 1000, 50000],
     #                                                         "max_depth": [10, 20, 50, 100, 500]}, scoring='neg_mean_squared_error', verbose=10, cv=5)
 
-    reg = GridSearchCV(RandomForestRegressor(), param_grid={"n_estimators": [10, 20, 50, 100, 200, 500, 1000, 50000],
-                                                            "max_depth": [10, 20, 50, 100, 500]},
+    reg = GridSearchCV(RandomForestRegressor(), param_grid={"n_estimators": [10, 20],
+                                                            "max_depth": [10, 20]},
                        scoring='neg_mean_squared_error', verbose=10, cv=5)
 
     # train
     reg.fit(x_train, y_train)
 
-    print("Best parameters set found on development set:")
-    print()
-    print(reg.best_params_)
-    print()
-
     # eval on training data
-    y_true, y_pred = y_train, reg.predict(x_train)
-    print("MSE on training data: {}\n".format(mean_squared_error(y_true, y_pred)))
+    y_true_train, y_pred_train = y_train, reg.predict(x_train)
 
     # eval on test data
     y_true, y_pred = y_test, reg.predict(x_test)
-    print("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
+
+    with open('RF_gridsearch.txt', 'a') as fp:
+        fp.write("Best parameters set found on development set:\n")
+        fp.write(json.dumps(reg.best_params_))
+        fp.write("\n\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
+        fp.write("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
 
 
 if __name__ == "__main__":

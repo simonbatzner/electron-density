@@ -99,10 +99,7 @@ def main():
     seed = 42
 
     # params
-    hidden = (30,)
-    epochs = 500000
     test_size = 0.1
-    learning_rate = 0.001
     decay = 0.0
 
     ens, seps, fours = load_data()
@@ -130,7 +127,7 @@ def main():
     y_test = np.array(y_test)
 
     # neural net
-    model = init_architecture(input_shape=pots[0].shape, hidden_size=tuple(hidden), summary=True,
+    model = init_architecture(input_shape=pots[0].shape, hidden_size=(hidden), summary=True,
                               activation='tanh')
 
     adam = optimizers.Adam(lr=learning_rate, decay=decay)
@@ -140,11 +137,12 @@ def main():
     # model.compile(optimizer=sgd, loss='mean_squared_error', metrics=['mse'])
 
     es = EarlyStopping(monitor='val_loss',
-                                 min_delta=0,
-                                 patience=500,
-                                 verbose=0, mode='auto')
+                       min_delta=0,
+                       patience=500,
+                       verbose=0, mode='auto')
 
-    tb = TensorBoard(log_dir='./logs', histogram_freq=0, batch_size=1, write_graph=True, write_grads=True, write_images=True, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None)
+    tb = TensorBoard(log_dir='./logs', histogram_freq=0, batch_size=1, write_graph=True, write_grads=True,
+                     write_images=True, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None)
 
     history = model.fit(x_train, y_train, epochs=epochs, verbose=0, validation_split=0.2, callbacks=[es, tb])
 
@@ -178,7 +176,11 @@ def main():
 
 
 if __name__ == "__main__":
-    global SIM_NO, STR_PREF, TEST
+    global SIM_NO, STR_PREF, TEST, hidden, epochs, learning_rate
+
+    hidden = (30,)
+    epochs = 500000
+    learning_rate = 0.001
 
     # ignore tf warning
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -189,5 +191,24 @@ if __name__ == "__main__":
     os.environ['PROJDIR'] = '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density'
     STR_PREF = os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/'
     TEST = np.load(os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/sep_store/sep149.npy')
+
+    # arguments
+    parser = argparse.ArgumentParser(
+        description='Machine Learning the ground-state charge density')
+
+    parser.add_argument('--hidden', nargs='+', type=int)
+    parser.add_argument('--lr', type=float)
+    parser.add_argument('--epochs', type=int)
+
+    args = parser.parse_args()
+
+
+    learning_rate = args.lr
+    epochs = args.epochs
+
+    hidden = (args.hidden[0],)
+    print("Hidden: {}".format(hidden))
+    print("LR: {}".format(learning_rate))
+    print("Epochs: {}".format(epochs))
 
     main()
