@@ -13,21 +13,14 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import json
 import os
-
-from sklearn import datasets
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error
-from sklearn.svm import SVC
 from sklearn.datasets import load_boston
+from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split
 from KRR_reproduce import *
-
-
-# from generate_H2_data import *
 
 
 def load_data():
@@ -57,40 +50,49 @@ def load_data():
 def main():
     seed = 42
 
-    # params
-    max_depth = 30
+    # params found from hyperparameter optimization (see RF_hyperparam.py)
+    n_estimators = 50
+    max_depth = 10
+
+    # load
     test_size = 0.1
     ens, seps, fours = load_data()
 
-    # setup training and test data
-    data = ens
+    # create gaussian potentials
+    print("Building potentials...")
+    pots = []
+    grid_len = 5.29177 * 2
+
+    for n in range(SIM_NO):
+        dist = seps[n]
+        pot = pot_rep(dist, grid_len, grid_space=0.8)
+        pot = pot.flatten()
+        pots.append(pot)
+
+    # setup training and test datas
+    data = pots
     labels = ens
     x_train, x_test, y_train, y_test = train_test_split(data, labels, test_size=test_size, random_state=seed)
 
     x_train = np.array(x_train)
-    x_train = x_train.reshape(-1, 1)
     x_test = np.array(x_test)
-    x_test = x_test.reshape(-1, 1)
     y_train = np.array(y_train)
     y_test = np.array(y_test)
 
-    # cross-validation
-    reg = GridSearchCV(RandomForestRegressor(), param_grid={"n_estimators": [10, 20, 50, 100, 200, 500, 1000, 5000],
-                                                            "max_depth": [10, 20, 50, 100, 500]},
-                       scoring='neg_mean_squared_error', verbose=10, cv=5)
-
-    # train
-    reg.fit(x_train, y_train)
+    # train random forest
+    estimator = RandomForestRegressor(random_state=0, n_estimators=n_estimators, max_depth=max_depth)
+    estimator.fit(x_train, y_train)
 
     # eval on training data
-    y_true_train, y_pred_train = y_train, reg.predict(x_train)
+    y_true_train, y_pred_train = y_train, estimator.predict(x_train)
 
     # eval on test data
-    y_true, y_pred = y_test, reg.predict(x_test)
+    y_true, y_pred = y_test, estimator.predict(x_test)
 
-    print("Best parameters set found on development set:\n")
-    print((reg.best_params_))
-    print("\n\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
+
+    print("Number of estimators: {}\n".format(n_estimators))
+    print("Maximum depth: {}".format(max_depth))
+    print("\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
     print("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
 
 

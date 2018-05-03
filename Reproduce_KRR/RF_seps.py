@@ -12,13 +12,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os, sys
 import numpy as np
-import os
-from sklearn.datasets import load_boston
+
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
 from sklearn.model_selection import train_test_split
 from KRR_reproduce import *
 
@@ -50,57 +48,48 @@ def load_data():
 def main():
     seed = 42
 
-    # params found from hyperparameter optimization (see RF_hyperparam.py)
-    n_estimators = 50
-    max_depth = 10
-
     # load
     test_size = 0.1
     ens, seps, fours = load_data()
 
-    # create gaussian potentials
-    print("Building potentials...")
-    pots = []
-    grid_len = 5.29177 * 2
-
-    for n in range(SIM_NO):
-        dist = seps[n]
-        pot = pot_rep(dist, grid_len, grid_space=0.08)
-        pot = pot.flatten()
-        pots.append(pot)
-
     # setup training and test datas
-    data = pots
+    data = seps
     labels = ens
     x_train, x_test, y_train, y_test = train_test_split(data, labels, test_size=test_size, random_state=seed)
 
     x_train = np.array(x_train)
+    x_train = x_train.reshape(-1,1)
     x_test = np.array(x_test)
+    x_test = x_test.reshape(-1,1)
     y_train = np.array(y_train)
     y_test = np.array(y_test)
 
 
     # train random forest
-    estimator = RandomForestRegressor(random_state=0, n_estimators=n_estimators, max_depth=max_depth)
+    estimator = RandomForestRegressor(random_state=0, n_estimators=N_ESTIMATORS, max_depth=MAX_DEPTH)
     estimator.fit(x_train, y_train)
 
     # eval on training data
-    y_true, y_pred = y_train, estimator.predict(x_train)
-    print("\nMSE on training data: \t{}".format(mean_squared_error(y_true, y_pred)))
+    y_true_train, y_pred_train = y_train, estimator.predict(x_train)
 
     # eval on test data
     y_true, y_pred = y_test, estimator.predict(x_test)
-    print("MSE on test data: \t\t{}".format(mean_squared_error(y_true, y_pred)))
 
-    # Predict on new data
-    print("\n\t\tPred \t| \tTrue\n")
-    print(np.c_[y_pred, y_true])
+
+    print("Number of estimators: {}\n".format(N_ESTIMATORS))
+    print("Maximum depth: {}".format(MAX_DEPTH))
+    print("\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
+    print("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
 
 
 if __name__ == "__main__":
-    global SIM_NO, STR_PREF, TEST
+    global SIM_NO, STR_PREF, TEST, N_ESTIMATORS, MAX_DEPTH
 
     SIM_NO = 150
+
+    # params found from hyperparameter optimization (see RF_hyperparam.py)
+    N_ESTIMATORS = 50
+    MAX_DEPTH = 10
 
     # path to data
     os.environ['PROJDIR'] = '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density'

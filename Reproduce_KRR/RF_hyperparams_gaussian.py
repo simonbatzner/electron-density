@@ -62,21 +62,29 @@ def main():
     test_size = 0.1
     ens, seps, fours = load_data()
 
+    # create list of gaussian potentials
+    print("Building potentials...")
+    pots = []
+    grid_len = 5.29177 * 2
+
+    for n in range(SIM_NO):
+        dist = seps[n]
+        pot = pot_rep(dist, grid_len, grid_space=0.8)
+        pot = pot.flatten()
+        pots.append(pot)
+
     # setup training and test data
-    data = ens
+    data = pots
     labels = ens
     x_train, x_test, y_train, y_test = train_test_split(data, labels, test_size=test_size, random_state=seed)
 
     x_train = np.array(x_train)
-    x_train = x_train.reshape(-1, 1)
     x_test = np.array(x_test)
-    x_test = x_test.reshape(-1, 1)
     y_train = np.array(y_train)
     y_test = np.array(y_test)
 
-    # cross-validation
-    reg = GridSearchCV(RandomForestRegressor(), param_grid={"n_estimators": [10, 20, 50, 100, 200, 500, 1000, 5000],
-                                                            "max_depth": [10, 20, 50, 100, 500]},
+    reg = GridSearchCV(RandomForestRegressor(), param_grid={"N_ESTIMATORS": [10, 20],
+                                                            "MAX_DEPTH": [10, 20]},
                        scoring='neg_mean_squared_error', verbose=10, cv=5)
 
     # train
@@ -88,19 +96,24 @@ def main():
     # eval on test data
     y_true, y_pred = y_test, reg.predict(x_test)
 
-    print("Best parameters set found on development set:\n")
-    print((reg.best_params_))
-    print("\n\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
-    print("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
+    with open('RF_gridsearch.txt', 'a') as fp:
+        fp.write("Best parameters set found on development set:\n")
+        fp.write(json.dumps(reg.best_params_))
+        fp.write("\n\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
+        fp.write("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
 
 
 if __name__ == "__main__":
     global SIM_NO, STR_PREF, TEST
+
+    # ignore tf warning
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     SIM_NO = 150
 
     # path to data
     os.environ['PROJDIR'] = '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density'
     STR_PREF = os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/'
+    TEST = np.load(os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/sep_store/sep149.npy')
 
     main()
