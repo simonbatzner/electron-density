@@ -19,7 +19,7 @@ import os
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.svm import SVC
 from sklearn.datasets import load_boston
 from sklearn.model_selection import cross_val_score
@@ -58,7 +58,6 @@ def main():
     seed = 42
 
     # params
-    max_depth = 30
     test_size = 0.1
     ens, seps, fours = load_data()
 
@@ -76,8 +75,9 @@ def main():
 
     # cross-validation
     reg = GridSearchCV(RandomForestRegressor(), param_grid={"n_estimators": [10, 20, 50, 100, 200, 500, 1000, 5000],
-                                                            "max_depth": [10, 20, 50, 100, 500]},
+                                                            "max_depth": [10, 20, 30, 40, 50, 100, 200]},
                        scoring='neg_mean_squared_error', verbose=10, cv=5)
+
 
     # train
     reg.fit(x_train, y_train)
@@ -90,8 +90,8 @@ def main():
 
     print("Best parameters set found on development set:\n")
     print((reg.best_params_))
-    print("\n\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
-    print("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
+    print("\n\nMAE on training data: {}\n".format(mean_absolute_error(y_true_train, y_pred_train)))
+    print("MAE on test data: {}".format(mean_absolute_error(y_true, y_pred)))
 
 
 if __name__ == "__main__":

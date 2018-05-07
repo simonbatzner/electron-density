@@ -15,7 +15,7 @@ from __future__ import print_function
 import os, sys
 import numpy as np
 
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from KRR_reproduce import *
@@ -66,7 +66,7 @@ def main():
 
 
     # train random forest
-    estimator = RandomForestRegressor(random_state=0, n_estimators=N_ESTIMATORS, max_depth=MAX_DEPTH)
+    estimator = RandomForestRegressor(random_state=seed, n_estimators=N_ESTIMATORS, max_depth=MAX_DEPTH)
     estimator.fit(x_train, y_train)
 
     # eval on training data
@@ -76,10 +76,10 @@ def main():
     y_true, y_pred = y_test, estimator.predict(x_test)
 
 
-    print("Number of estimators: {}\n".format(N_ESTIMATORS))
+    print("\nNumber of estimators: {}".format(N_ESTIMATORS))
     print("Maximum depth: {}".format(MAX_DEPTH))
-    print("\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
-    print("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
+    print("\nMAE on training data: {}\n".format(mean_absolute_error(y_true_train, y_pred_train)))
+    print("MAE on test data: {}".format(mean_absolute_error(y_true, y_pred)))
 
 
 if __name__ == "__main__":
@@ -88,12 +88,11 @@ if __name__ == "__main__":
     SIM_NO = 150
 
     # params found from hyperparameter optimization (see RF_hyperparam.py)
-    N_ESTIMATORS = 50
-    MAX_DEPTH = 10
+    N_ESTIMATORS = 500
+    MAX_DEPTH = 50
 
     # path to data
     os.environ['PROJDIR'] = '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density'
     STR_PREF = os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/'
-    TEST = np.load(os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/sep_store/sep149.npy')
 
     main()
