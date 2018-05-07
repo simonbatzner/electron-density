@@ -17,13 +17,9 @@ import numpy as np
 import json
 import os
 
-from sklearn import datasets
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_absolute_error
-from sklearn.svm import SVC
-from sklearn.datasets import load_boston
-from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestRegressor
 from KRR_reproduce import *
 
