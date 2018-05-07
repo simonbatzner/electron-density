@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-"""" ML mapping from external potential to charge density - AP275 Class Project, Harvard University
+"""" Hyperparameter optimization for the Random Forest KS - Mapping using Gaussian Potentials
 
+    AP275 Class Project, Harvard University
     # References:
         [1] Brockherde et al. Bypassing the Kohn-Sham equations with machine learning. Nature Communications 8, 872 (2017)
 
@@ -19,15 +20,12 @@ import os
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.svm import SVC
 from sklearn.datasets import load_boston
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestRegressor
 from KRR_reproduce import *
-
-
-# from generate_H2_data import *
 
 
 def load_data():
@@ -58,62 +56,66 @@ def main():
     seed = 42
 
     # params
-    max_depth = 30
     test_size = 0.1
     ens, seps, fours = load_data()
+    grid_space_min = 0.5
+    grid_space_max = 1.0
+    grid_space_list = np.linspace(grid_space_min, grid_space_max, 6)
+    print(grid_space_list)
 
-    # create list of gaussian potentials
-    print("Building potentials...")
-    pots = []
-    grid_len = 5.29177 * 2
+    for grid_space in grid_space_list:
 
-    for n in range(SIM_NO):
-        dist = seps[n]
-        pot = pot_rep(dist, grid_len, grid_space=0.8)
-        pot = pot.flatten()
-        pots.append(pot)
+        print("Grid space: {}".format(grid_space))
+        # create list of gaussian potentials
+        print("Building potentials...")
+        pots = []
+        grid_len = 5.29177 * 2
 
-    # setup training and test data
-    data = pots
-    labels = ens
-    x_train, x_test, y_train, y_test = train_test_split(data, labels, test_size=test_size, random_state=seed)
+        for n in range(SIM_NO):
+            dist = seps[n]
+            pot = pot_rep(dist, grid_len, grid_space=grid_space)
+            pot = pot.flatten()
+            pots.append(pot)
 
-    x_train = np.array(x_train)
-    x_test = np.array(x_test)
-    y_train = np.array(y_train)
-    y_test = np.array(y_test)
+        # setup training and test data
+        data = pots
+        labels = ens
+        x_train, x_test, y_train, y_test = train_test_split(data, labels, test_size=test_size, random_state=seed)
 
-    reg = GridSearchCV(RandomForestRegressor(), param_grid={"N_ESTIMATORS": [10, 20],
-                                                            "MAX_DEPTH": [10, 20]},
-                       scoring='neg_mean_squared_error', verbose=10, cv=5)
+        x_train = np.array(x_train)
+        x_test = np.array(x_test)
+        y_train = np.array(y_train)
+        y_test = np.array(y_test)
 
-    # train
-    reg.fit(x_train, y_train)
+        reg = GridSearchCV(RandomForestRegressor(),
+                           param_grid={"n_estimators": [10, 20, 50, 100, 200, 500, 1000, 2000, 5000],
+                                       "max_depth": [10, 20, 30, 40, 50, 100, 200]},
+                           scoring='neg_mean_absolute_error', verbose=10, cv=5)
 
-    # eval on training data
-    y_true_train, y_pred_train = y_train, reg.predict(x_train)
+        # train
+        reg.fit(x_train, y_train)
 
-    # eval on test data
-    y_true, y_pred = y_test, reg.predict(x_test)
+        # eval on training data
+        y_true_train, y_pred_train = y_train, reg.predict(x_train)
 
-    with open('RF_gridsearch.txt', 'a') as fp:
-        fp.write("Best parameters set found on development set:\n")
-        fp.write(json.dumps(reg.best_params_))
-        fp.write("\n\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
-        fp.write("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
+        # eval on test data
+        y_true, y_pred = y_test, reg.predict(x_test)
+
+        with open('RF_gridsearch.txt', 'a') as fp:
+            fp.write("\n=======================\n")
+            fp.write("Best parameters set found for grid_space = {} on development set:\n".format(grid_space))
+            fp.write(json.dumps(reg.best_params_))
+            fp.write("\n\nMAE on training data: {}\n".format(mean_absolute_error(y_true_train, y_pred_train)))
+            fp.write("\tMAE on test data: {}\n".format(mean_absolute_error(y_true, y_pred)))
 
 
 if __name__ == "__main__":
     global SIM_NO, STR_PREF, TEST
 
-    # ignore tf warning
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
     SIM_NO = 150
 
     # path to data
-    os.environ['PROJDIR'] = '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density'
-    STR_PREF = os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/'
-    TEST = np.load(os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/sep_store/sep149.npy')
+    os.environ['PROJDIR'] = '/home/sbatzner'
+    STR_PREF = os.environ['PROJDIR'] + '/store/'
 
     main()

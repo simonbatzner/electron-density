@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-"""" ML mapping from external potential to charge density - AP275 Class Project, Harvard University
+"""" Random Forest KS - Mapping using Gaussian Potentials
+
+    AP275 Class Project, Harvard University
 
     # References:
         [1] Brockherde et al. Bypassing the Kohn-Sham equations with machine learning. Nature Communications 8, 872 (2017)
@@ -15,7 +17,7 @@ from __future__ import print_function
 import numpy as np
 import os
 from sklearn.datasets import load_boston
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
@@ -50,12 +52,13 @@ def load_data():
 def main():
     seed = 42
 
-    # params found from hyperparameter optimization (see RF_hyperparam.py)
-    n_estimators = 50
-    max_depth = 10
+    # params found from hyperparameter optimization
+    n_estimators = 1000
+    max_depth = 20
+    test_size = 0.1
+    grid_space = 0.8
 
     # load
-    test_size = 0.1
     ens, seps, fours = load_data()
 
     # create gaussian potentials
@@ -65,7 +68,7 @@ def main():
 
     for n in range(SIM_NO):
         dist = seps[n]
-        pot = pot_rep(dist, grid_len, grid_space=0.8)
+        pot = pot_rep(dist, grid_len, grid_space=grid_space)
         pot = pot.flatten()
         pots.append(pot)
 
@@ -80,7 +83,7 @@ def main():
     y_test = np.array(y_test)
 
     # train random forest
-    estimator = RandomForestRegressor(random_state=0, n_estimators=n_estimators, max_depth=max_depth)
+    estimator = RandomForestRegressor(random_state=seed, n_estimators=n_estimators, max_depth=max_depth)
     estimator.fit(x_train, y_train)
 
     # eval on training data
@@ -89,11 +92,10 @@ def main():
     # eval on test data
     y_true, y_pred = y_test, estimator.predict(x_test)
 
-
-    print("Number of estimators: {}\n".format(n_estimators))
+    print("\nNumber of estimators: {}".format(n_estimators))
     print("Maximum depth: {}".format(max_depth))
-    print("\nMSE on training data: {}\n".format(mean_squared_error(y_true_train, y_pred_train)))
-    print("MSE on test data: {}".format(mean_squared_error(y_true, y_pred)))
+    print("\nMAE on training data: {}\n".format(mean_absolute_error(y_true_train, y_pred_train)))
+    print("MAE on test data: {}".format(mean_absolute_error(y_true, y_pred)))
 
 
 if __name__ == "__main__":
@@ -102,7 +104,7 @@ if __name__ == "__main__":
     SIM_NO = 150
 
     # path to data
-    os.environ['PROJDIR'] = '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density'
-    STR_PREF = os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/'
+g    os.environ['PROJDIR'] =  # project path
+    STR_PREF = os.environ['PROJDIR'] +  # data
 
     main()
