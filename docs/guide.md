@@ -22,6 +22,9 @@ We also make use of the following Python libraries for our analysis:
 - Sklearn
 - PyMC
 
+To facilitate the generation of the datasets and the analysis, we have developed a suite of helper objects and functions in the dataflow programming paradigm which are included in the /util folder (we suggest that you add this folder to your local Python path while using this code).
+The PWSCF set of objects is designed to facilitate 
+
 
 
 Interested readers should visit the GitHub repo of our project; the 'start_here' folder includes various examples of things we
