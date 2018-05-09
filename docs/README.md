@@ -15,5 +15,17 @@ We present our work across datasets generated in Quantum ESPRESSO and one genera
 
 ## Overview of Code
 
-Interested readers should visit the GitHub repo of our project, in which we document various 
+Our code has the following prerequisites. To generate the data sets, you must have the following on your local machine or available on a cluster:
+
+- Python 3.6 (with Numpy, Scipy, Matplotlib)
+- Quantum ESPRESSO
+
+We also make use of the following Python libraries for our analysis:
+
+- Sklearn
+- PyMC
+
+
+
+Interested readers should visit the GitHub repo of our project; the 'start_here' folder includes various examples of things we
 
