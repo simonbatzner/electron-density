@@ -41,21 +41,20 @@ Our code has the following prerequisites. To generate the data sets, you must ha
 
 Python can be obtained from a variety of sources; a distribution like Anaconda should come with Numpy, Scipy, and Matplotlib. Instructions for installing ESPRESSO and LAMMPS are available on their respective websites. 
 
-We also make use of the following Python libraries for our analysis:
+We also make use of the following Python libraries and tools for our analysis:
 
 - Sklearn
 - PyMC
+- Jupyter Notebooks
+
 
 To facilitate the generation of the datasets and the analysis, we have developed a suite of helper objects and functions in the dataflow programming paradigm which are included in the [/util](https://github.com/simonbatzner/ML-electron-density/tree/master/util) folder (we suggest that you add this folder to your local Python path while using this code). The PWSCF suite of functions are designed to facilitate Quantum ESPRESSO calculations in a highly modular way; the PP suite of functions, for the use of the ESPRESSO postprocessing module. We also have code to assist the LAMMPS calculation. All of these functions are included in the [\util](https://github.com/simonbatzner/ML-electron-density/tree/master/util) folder in the repo.
 
-Individual folders 
+We present an exposition of our analysis in iPython notebooks throghout the Al and H2 subdirectories. Each one is labelled according to the regression method that it attempts (corresponding to steps 4 and 5 of our workflow).
+
+## Individual folders 
 
 
 The PWSCF set of objects is from Prof. Boris Kozisnky, the instructor for Applied Physics 275 (the course that this Repo began as a term project for). We developed a set of functions in order to facilitate the calculations. They are included in the util folder.
 
-Interested readers should visit the GitHub repo of our project; the 'start_here' folder includes various examples of things we
-
-
-
-## Overview of Repo
-
+Interested readers should visit the GitHub repo of our project; the 'start_here' folder includes various examples.
