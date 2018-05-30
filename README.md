@@ -18,5 +18,12 @@ We present our work across datasets generated in Quantum ESPRESSO and one genera
 
 ## Overview of Code
 
-Interested readers should visit the GitHub repo of our project, in which we document various 
+Interested readers should visit the GitHub repo of our project, in which we document various ways to reproduce the datasets and analysis yourself in the 'start_here' folder.
 
+You will need some of the following:
+
+1. A local installation of the Quantum ESPRESSO package.
+
+
+
+Optionally,
