@@ -36,7 +36,7 @@ from KRR_reproduce import *
 
 # params
 kernel_choice = 'rbf'  # specify either c_rbf, rbf, matern or expsinesquared
-m = 7  # number of training points
+m = 5  # number of training points
 
 # setup
 ev2kcal = 1 / 0.043  # conversion factor
@@ -89,53 +89,53 @@ x_test_list = [data[n] for n in test_indices]
 x_train_list = [data[n] for n in train_indices]
 
 # build gp w/ a noiseless kernel and print properties
-kernel_dict = {
-    'c_rbf': C(1.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2)),
-    'rbf': RBF(length_scale=10, length_scale_bounds=(1e-2, 1e2)),
-    'matern': Matern(length_scale=10, length_scale_bounds=(1e-2, 1e2),
+kernel_mat = [C(1.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2)),
+              RBF(length_scale=10, length_scale_bounds=(1e-2, 1e2)),
+              Matern(length_scale=10, length_scale_bounds=(1e-2, 1e2),
                      nu=10),
-    'expsinesquared': ExpSineSquared(length_scale=1.0, periodicity=3.0,
-                                     length_scale_bounds=(1e-2, 1e2),
-                                     periodicity_bounds=(1e-2, 1e2))}
+              ExpSineSquared(length_scale=1.0, periodicity=3.0,
+                             length_scale_bounds=(1e-2, 1e2),
+                             periodicity_bounds=(1e-2, 1e2))]
 
-kernel = kernel_dict[kernel_choice]
+for fig_index, kernel in enumerate(kernel_mat):
 
-print("\nKernel: {}".format(kernel))
-print("Hyperparameters: \n")
+    #build gp
+    gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, normalize_y=True)
 
-for hyperparameter in kernel.hyperparameters: print(hyperparameter)
-print("Parameters:\n")
+    #plot prior
+    plt.figure(fig_index, figsize=(8, 8))
+    plt.subplot(2, 1, 1)
+    X_ = np.array(seps)
+    y_mean, y_std = gp.predict(X_[:, np.newaxis], return_std=True)
+    plt.plot(X_, y_mean, 'k', lw=3, zorder=9)
+    plt.fill_between(X_, y_mean - y_std, y_mean + y_std,
+                     alpha=0.2, color='k')
+    y_samples = gp.sample_y(X_[:, np.newaxis], 10)
+    plt.plot(X_, y_samples, lw=1)
+    plt.title("Prior (kernel:  %s)" % kernel, fontsize=12)
 
-params = kernel.get_params()
-for key in sorted(params): print("%s : %s" % (key, params[key]))
+    # fit
+    gp.fit(x_train, y_train)
 
-gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, normalize_y=True)
+    # inference
+    x_train_list = [data[n] for n in train_indices]
+    y_pred_test = gp.predict(np.atleast_2d(x_train_list).T)
 
-# fit
-print("\nFitting GP...")
-gp.fit(x_train, y_train)
+    # plot posterior
+    plt.subplot(2, 1, 2)
+    y_mean, y_std = gp.predict(X_[:, np.newaxis], return_std=True)
+    plt.plot(X_, y_mean, 'k', lw=3, zorder=9)
+    plt.fill_between(X_, y_mean - y_std, y_mean + y_std,
+                     alpha=0.2, color='k')
 
-# inference
-y_pred_test = gp.predict(np.atleast_2d(x_test_list).T)
-y_pred_train = gp.predict(np.atleast_2d(x_train_list).T)
-y_pred_all, sigma = gp.predict(np.atleast_2d(seps).T, return_std=True)
+    y_samples = gp.sample_y(X_[:, np.newaxis], 10)
+    plt.plot(X_, y_samples, lw=1)
 
-# print results
-print("\n=============================================")
-print("MAE on training data in [kcal/mol]: \t{}".format(mean_absolute_error(y_train, y_pred_train) * ev2kcal))
-print("MAE on test data in [kcal/mol]: \t\t{}".format(mean_absolute_error(y_test, y_pred_test) * ev2kcal))
-
-# plot w/ confidence intervals
-fig = plt.figure()
-plt.plot(x_train, y_train, 'r.', markersize=10, label=u'Training Data')
-plt.plot(x_test, y_pred_test, 'b-', label=u'Predictions')
-plt.fill(np.concatenate([seps, seps[::-1]]),
-         np.concatenate([y_pred_all - 1.9600 * sigma,
-                         (y_pred_all + 1.9600 * sigma)[::-1]]),
-         alpha=.5, fc='b', ec='None', label='95% confidence interval')
-
-plt.xlabel('$x$')
-plt.ylabel('$f(x)$')
-plt.legend(loc='upper left')
+    plt.scatter(x_train[:, 0], y_pred_test, c='r', s=10, zorder=10, edgecolors=(0, 0, 0))
+    plt.title("Posterior (kernel: %s)\n Log-Likelihood: %.3f"
+              % (gp.kernel_, gp.log_marginal_likelihood(gp.kernel_.theta)),
+              fontsize=12)
+    plt.tight_layout()
 
 plt.show()
+
