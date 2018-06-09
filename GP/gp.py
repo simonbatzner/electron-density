@@ -23,20 +23,21 @@ from matplotlib import pyplot as plt
 def warn(*args, **kwargs):
     pass
 
-
 import warnings
-
 warnings.warn = warn
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.metrics import mean_absolute_error
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, Matern, ExpSineSquared
 from KRR_reproduce import *
+
+# params
+kernel = 'expsinesquared' #specify either c_rbf, rbf, matern or expsinesquared
+m = 7 # number of training points
 
 # setup
 ev2kcal = 1 / 0.043  # conversion factor
 sim_no = 150  # total number of data points
-m = 7  # number of training points
 np.random.seed(1)
 
 # path to data
@@ -84,10 +85,27 @@ y_test = np.array(y_test)
 x_test_list = [data[n] for n in test_indices]
 x_train_list = [data[n] for n in train_indices]
 
-# build gp
-# kernel = C(1.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2))
-kernel = RBF(10, (1e-2, 1e2))
-gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=9, normalize_y=True)
+# build gp w/ a noiseless kernel and print properties
+if kernel == 'c_rbf':
+    kernel = C(1.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2))
+if kernel == 'rbf':
+    kernel == RBF(length_scale=10, length_scale_bounds=(1e-2, 1e2))
+if kernel == 'matern':
+    kernel = Matern(length_scale=10, length_scale_bounds=(1e-2, 1e2),
+                        nu=10)
+if kernel == 'expsinesquared':
+    kernel = ExpSineSquared(length_scale=1.0, periodicity=3.0,
+                                length_scale_bounds=(1e-2, 1e2),
+                                periodicity_bounds=(1e-2, 1e2))
+print("Hyperparameters: \n")
+
+for hyperparameter in kernel.hyperparameters: print(hyperparameter)
+print("Parameters:\n")
+
+params = kernel.get_params()
+for key in sorted(params): print("%s : %s" % (key, params[key]))
+
+gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, normalize_y=True)
 
 # fit
 print("\nFitting GP...")
