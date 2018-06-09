@@ -18,6 +18,12 @@ import os
 import numpy as np
 from matplotlib import pyplot as plt
 
+# suppress sklearn warnings
+def warn(*args, **kwargs):
+    pass
+import warnings
+warnings.warn = warn
+
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 from KRR_reproduce import *
@@ -25,7 +31,7 @@ from KRR_reproduce import *
 # setup
 ev2kcal = 1 / 0.043  # conversion factor
 SIM_NO = 150  # total number of data points
-M = 140  # number of training points
+M = 7 # number of training points
 np.random.seed(1)
 
 # path to data
