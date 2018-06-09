@@ -6,6 +6,7 @@
     # References:
         [1] Brockherde et al. Bypassing the Kohn-Sham equations with machine learning. Nature Communications 8, 872 (2017)
         [2] http://scikit-learn.org/stable/auto_examples/gaussian_process/plot_gpr_noisy_targets.html
+        [3] http://scikit-learn.org/stable/auto_examples/gaussian_process/plot_gpr_prior_posterior.html#sphx-glr-auto-examples-gaussian-process-plot-gpr-prior-posterior-py
 
 Simon Batzner, Steven Torrisi, Jon Vandermause
 """
@@ -18,12 +19,12 @@ import os
 import numpy as np
 from matplotlib import pyplot as plt
 
-
 # suppress sklearn warnings
 def warn(*args, **kwargs):
     pass
 
 import warnings
+
 warnings.warn = warn
 
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -32,8 +33,8 @@ from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, Matern, E
 from KRR_reproduce import *
 
 # params
-kernel = 'expsinesquared' #specify either c_rbf, rbf, matern or expsinesquared
-m = 7 # number of training points
+kernel = 'rbf'  # specify either c_rbf, rbf, matern or expsinesquared
+m = 7  # number of training points
 
 # setup
 ev2kcal = 1 / 0.043  # conversion factor
@@ -89,14 +90,16 @@ x_train_list = [data[n] for n in train_indices]
 if kernel == 'c_rbf':
     kernel = C(1.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2))
 if kernel == 'rbf':
-    kernel == RBF(length_scale=10, length_scale_bounds=(1e-2, 1e2))
+    kernel = RBF(length_scale=10, length_scale_bounds=(1e-2, 1e2))
 if kernel == 'matern':
     kernel = Matern(length_scale=10, length_scale_bounds=(1e-2, 1e2),
-                        nu=10)
+                    nu=10)
 if kernel == 'expsinesquared':
     kernel = ExpSineSquared(length_scale=1.0, periodicity=3.0,
-                                length_scale_bounds=(1e-2, 1e2),
-                                periodicity_bounds=(1e-2, 1e2))
+                            length_scale_bounds=(1e-2, 1e2),
+                            periodicity_bounds=(1e-2, 1e2))
+
+print("\nKernel: {}".format(kernel))
 print("Hyperparameters: \n")
 
 for hyperparameter in kernel.hyperparameters: print(hyperparameter)
