@@ -24,6 +24,3 @@ You will need some of the following:
 
 1. A local installation of the Quantum ESPRESSO package.
 
-
-
-Optionally,
