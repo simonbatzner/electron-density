@@ -19,7 +19,8 @@ from Solid_State import KRR_Functions
 
 class MD_engine():
     def __init__(self, input_atoms=[], cell=np.eye(3), dx=.1, verbosity=1, model='SHO', store_trajectory=True,
-                 espresso_config=None, thermo_config=None, ML_model=None, assert_boundaries=True, fd_accuracy=2):
+                 espresso_config=None, thermo_config=None, ML_model=None, assert_boundaries=True, fd_accuracy=2,
+                 threshold=0):
         """
         Initialize the features of the system, which include:
         input_atoms: Atoms in the unit cell, list of objects of type Atom (defined later on in this notebook)
@@ -39,6 +40,7 @@ class MD_engine():
         fd_accuracy: Integer 2 or 4. Determines if the finite difference force calculation will be evaluated to
                         second or fourth order in dx. Note that this increases the number of energy calculations
                         and thus increases run time.
+        threshold: Defines an uncertainty cutoff above which a DFT run will be called.
         """
         self.verbosity = verbosity
 
@@ -70,6 +72,8 @@ class MD_engine():
 
         self.fd_accuracy = fd_accuracy
 
+        self.threshold = threshold
+
     def add_atom(self, atom):
         """
         Helper function which adds atoms to the simulation
@@ -94,17 +98,17 @@ class MD_engine():
         if self.model == 'SHO':
             return SHO_energy(atoms)
 
-        ####################################################################################
+        #######
         # Below are 'hooks' where we will later plug in to our machine learning models
-        ####################################################################################
+        #######
         if self.model == 'GP':
             pass
-        # config = GP_config(positions)
-        # energy, uncertainty = GP_energy(config, self.ML_model)
-        # if np.norm(uncertainty) > .01:
-        #     print("Warning: Uncertainty cutoff found.")
-        #
-        # return GP_energy(config, self.ML_model)
+            # config = GP_config(positions)
+            # energy, uncertainty = GP_energ(config, self.ML_model)
+            # if np.norm(uncertainty) > .01:
+            #     print("Warning: Uncertainty cutoff found.")
+            #
+            # return GP_energy(config, self.ML_model)
 
         # Kernel Ridge Regression
         if self.model == "KRR":
@@ -261,34 +265,19 @@ class MD_engine():
             if self.verbosity >= 3:
                 self.print_positions()
 
-            # If using Gaussian processes, we may want to augment the training data set
-            if self.model == 'GP':
+            # WHERE ML-BASED UNCERTAINTY COMES INTO PLAY
+            if (self.model == 'GP' or self.model == 'KRR') and self.threshold > 0:
 
-                valid = self.gauge_uncertainty(self.atoms, self.threshold)
+                valid = self.gauge_uncertainty()
                 if valid:
                     continue
                 else:
                     pass
                     # take_timestep(-dt)
                     # self.time -= dt
-                    # call_dft()
-                    # train_model()
-
-    def gauge_uncertainty(self, positions, threshold):
-        """
-        For later implementation with the Gaussian Process model.
-        Will check to see if the uncertainty of the model's prediction of the energy
-        within a given configuration is within an acceptable bound given by threshold.
-
-        If it is unacceptable, the current configuration is exported into a Quantum ESPRESSO run,
-        which is then added into the ML dataset and the model is re-trained.
-        """
-        config = GP_config(positions)
-        sigma = get_config_uncertainty(config)
-        if sigma > threshold:
-            return False
-        else:
-            return True
+                    # run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
+                    #              iscorrection=True)
+                    # self.retrain_ml_model()
 
     def assert_boundary_conditions(self):
         """
@@ -334,6 +323,49 @@ class MD_engine():
                 print('Atom %d:' % n, np.round(pos, decimals=4), ' Force:', np.round(force, decimals=6))
             else:
                 print('Atom %d:' % n, np.round(pos, decimals=4))
+
+    def gauge_model_uncertainty(self):
+        """
+        For later implementation with the Gaussian Process model.
+        Will check to see if the uncertainty of the model's prediction of the energy
+        within a given configuration is within an acceptable bound given by threshold.
+
+        If it is unacceptable, the current configuration is exported into a Quantum ESPRESSO run,
+        which is then added into the ML dataset and the model is re-trained.
+        """
+        if self.model == "KRR":
+            pass
+            #
+            # config = KRR.config(self.atoms, self.cell)
+            # if self.threshold < KRR_uncertainty(configuration):
+            #     print("!! The uncertainty of the model is outside of the ")
+            #     return False
+
+        if self.model == "GP":
+            pass
+
+        return True
+
+    def retrain_ml_model(self, model=None, ML_model=None):
+        model = model or self.model
+        ML_model = ML_model or self.ML_model
+
+        if self.model == 'KRR':
+            # init_train_set = self.ML_model.original_train_set
+            # init_train_ens = self.ML_model.original_train_ens
+            #
+            # aug_train_set, aug_train_ens = get_aug_values(self.espresso_config.correction_folder)
+            #
+            # new_train_set = np.concatenate(init_train_set, aug_train_set)
+            # new_train_ens = np.concatenate(init_train_ens, aug_train_ens)
+            #
+            # self.ML_model.quick_fit(new_train_set, new_train_ens, self.ML_model.alpha, self.ML_model.gamma)
+            # return
+            pass
+
+        if self.model == "GP":
+            pass
+
 
 
 class Atom():
@@ -432,7 +464,6 @@ class ESPRESSO_config(object):
 # config2 = ESPRESSO_config(molecule=False)
 # config2.molecule = False
 config2 = None
-
 
 
 def first_derivative_2nd(fm, fp, h):
@@ -577,6 +608,7 @@ def KRR_config(atoms, cell):
         coords[:, n] = np.dot(la.inv(cell), atoms[n].position)
     # print("And the after:",coords.T.flatten().reshape(1,-1))
     return coords.T.flatten().reshape(1, -1)
+
 
 #
 # # Leaving it this way for now because it's simpler for testing aluminum plus no

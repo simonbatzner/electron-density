@@ -79,7 +79,7 @@ def set_scf(arguments):
 
 def load_data(str_pref, sim_no):
     """"
-    Load DFT data, set up input/target and convert to Atom rep
+    Load DFT data, set up input/target and convert to Atom representation
     """
     print("\nLoading data ...")
     pos = []
@@ -87,13 +87,15 @@ def load_data(str_pref, sim_no):
 
     for n in range(sim_no):
         # load arrays
-        en_curr = np.reshape(np.load(str_pref + 'en_store/energy' + str(n) + '.npy'), (1))[0]
+        en_curr = np.reshape(np.load(str_pref + 'en_store/energy' + str(n) + '.npy'), 1)[0]
         pos_curr = np.load(str_pref + 'pos_store/pos' + str(n) + '.npy')
 
         # store arrays
         ens.append(en_curr)
         pos_curr = pos_curr.flatten()
         pos.append(pos_curr)
+
+    print("Number of training points: {}".format(len(pos)))
 
     # convert to np arrays
     ens = np.array(ens)
@@ -110,23 +112,26 @@ def load_data(str_pref, sim_no):
     return pos, ens, atoms
 
 
-def build_gp(length_scale, length_scale_min, length_scale_max):
+def build_gp(length_scale, length_scale_min, length_scale_max, verbosity):
     """
     Build Gaussian Process using scikit-learn, print hyperparams and return model
     :return: gp model
     """
     kernel = RBF(length_scale=length_scale, length_scale_bounds=(length_scale_min, length_scale_max))
 
-    print("\nKernel: {}".format(kernel))
-    print("Hyperparameters: \n")
+    if verbosity:
+        print("\n================================================================")
+        print("\nKernel: {}".format(kernel))
+        print("Hyperparameters: \n")
 
-    for hyperparameter in kernel.hyperparameters:
-        print(hyperparameter)
-    print("Parameters:\n")
+        for hyperparameter in kernel.hyperparameters:
+            print(hyperparameter)
+        print("Parameters:\n")
 
-    params = kernel.get_params()
-    for key in sorted(params):
-        print("%s : %s" % (key, params[key]))
+        params = kernel.get_params()
+        for key in sorted(params):
+            print("%s : %s" % (key, params[key]))
+        print("\n================================================================")
 
     gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, normalize_y=True)
 
@@ -140,7 +145,7 @@ def main(arguments):
 
     # params
     ev2kcal = 1 / 0.043
-    str_pref = os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/'
+    str_pref = os.environ['PROJDIR']+'/Aluminium_Dataset/Store/'
     sim_no = 201  # total number of data points
 
     # define scf params
@@ -151,18 +156,19 @@ def main(arguments):
 
     # build gaussian process model
     gp = build_gp(length_scale=arguments.length_scale, length_scale_min=arguments.length_scale_min,
-                  length_scale_max=arguments.length_scale_max)
+                  length_scale_max=arguments.length_scale_max, verbosity=arguments.verbosity)
 
-    # fit
+    # train model
     print("\nFitting GP...")
     gp.fit(x_train, y_train)
 
-    # build MD-ML engine
-    GP_engine = MD_engine(cell=alat * np.eye(3), input_atoms=atoms, ML_model=gp, model='KRR',
-                          store_trajectory=True, verbosity=4, assert_boundaries=False, dx=.1, fd_accuracy=4,
+    # build MD engine
+    GP_engine = MD_engine(cell=alat * np.eye(3), input_atoms=atoms, ML_model=gp, model='GP',
+                          store_trajectory=True, verbosity=arguments.verbosity, assert_boundaries=False, dx=.1,
+                          fd_accuracy=4,
                           threshold=0)
 
-    # run
+    # run MD engine
     print("\nRunning MD engine...")
     GP_engine.run(1, .1)
 
@@ -175,6 +181,7 @@ if __name__ == '__main__':
     parser.add_argument('--length_scale', type=float, default=10)
     parser.add_argument('--length_scale_min', type=str, default=1e-2)
     parser.add_argument('--length_scale_max', type=str, default=1e2)
+    parser.add_argument('--verbosity', type=int, default=1)
 
     args = parser.parse_args()
     print(args)
