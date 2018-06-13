@@ -16,6 +16,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
 import os
 import argparse
 import numpy as np
@@ -50,16 +51,25 @@ def set_scf(arguments):
         outdir = '/n/home03/jonpvandermause/Cluster/Si_Supercell_SCF'
         pw_loc = '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
         email = 'jonathan_vandermause@g.harvard.edu'
+
     elif partition == 'kaxiras':
         pseudo_dir = '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0'
         outdir = ''
         pw_loc = ''
         email = 'torrisi@g.harvard.edu'
+
     elif partition == 'mit':
         pseudo_dir = ''
         outdir = ''
         pw_loc = ''
         email = 'sbatzner@mit.edu'
+
+    elif partition == 'simon_local':
+        pseudo_dir = '/Users/simonbatzner1/QE/qe-6.0/pseudo'
+        outdir = sys.path.append(os.environ['ML_HOME'] + '/runs')
+        pw_loc = '/Users/simonbatzner1/QE/qe-6.0/bin/pw.x'
+        email = 'sbatzner@mit.edu'
+
     else:
         raise ValueError('Please provide a proper partition')
         sys.exit(1)
@@ -68,6 +78,9 @@ def set_scf(arguments):
 
 
 def load_data(str_pref, sim_no):
+    """"
+    Load DFT data, set up input/target and convert to Atom rep
+    """
     print("\nLoading data ...")
     pos = []
     ens = []
@@ -97,8 +110,12 @@ def load_data(str_pref, sim_no):
     return pos, ens, atoms
 
 
-def build_gp():
-    kernel = RBF(length_scale=10, length_scale_bounds=(1e-2, 1e2))
+def build_gp(length_scale, length_scale_min, length_scale_max):
+    """
+    Build Gaussian Process using scikit-learn, print hyperparams and return model
+    :return: gp model
+    """
+    kernel = RBF(length_scale=length_scale, length_scale_bounds=(length_scale_min, length_scale_max))
 
     print("\nKernel: {}".format(kernel))
     print("Hyperparameters: \n")
@@ -112,6 +129,8 @@ def build_gp():
         print("%s : %s" % (key, params[key]))
 
     gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, normalize_y=True)
+
+    return gp
 
 
 def main(arguments):
@@ -131,7 +150,8 @@ def main(arguments):
     x_train, y_train, atoms = load_data(str_pref, sim_no)
 
     # build gaussian process model
-    gp = build_gp()
+    gp = build_gp(length_scale=arguments.length_scale, length_scale_min=arguments.length_scale_min,
+                  length_scale_max=arguments.length_scale_max)
 
     # fit
     print("\nFitting GP...")
@@ -152,6 +172,9 @@ if __name__ == '__main__':
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--partition', type=str, default='kozinsky')
+    parser.add_argument('--length_scale', type=float, default=10)
+    parser.add_argument('--length_scale_min', type=str, default=1e-2)
+    parser.add_argument('--length_scale_max', type=str, default=1e2)
 
     args = parser.parse_args()
     print(args)
