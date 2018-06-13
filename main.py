@@ -26,7 +26,49 @@ from sklearn.gaussian_process.kernels import RBF
 from utility import Atom, MD_engine
 
 
+def set_scf(arguments):
+    """"
+    Set constants used for SCF
+    """
+    global pref, pseudo_dir, outdir, alat, ecut, nk, dim, nat, pw_loc, in_name, out_name, sh_name, partition, memory, email
+
+    alat = 5.431  # lattice parameter of si in angstrom
+    ecut = 18.0  # plane wave cutoff energy
+    nk = 8  # size of kpoint grid
+    dim = 4  # size of supercell
+    nat = 2 * dim ** 3
+    memory = 1000
+
+    pref = 'si'
+    in_name = 'si.scf.in'
+    out_name = 'si.scf.out'
+    sh_name = 'Si_Super.sh'
+    partition = arguments.partition
+
+    if partition == 'kozinsky':
+        pseudo_dir = '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
+        outdir = '/n/home03/jonpvandermause/Cluster/Si_Supercell_SCF'
+        pw_loc = '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
+        email = 'jonathan_vandermause@g.harvard.edu'
+    elif partition == 'kaxiras':
+        pseudo_dir = '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0'
+        outdir = ''
+        pw_loc = ''
+        email = 'torrisi@g.harvard.edu'
+    elif partition == 'mit':
+        pseudo_dir = ''
+        outdir = ''
+        pw_loc = ''
+        email = 'sbatzner@mit.edu'
+    else:
+        raise ValueError('Please provide a proper partition')
+        sys.exit(1)
+
+    return
+
+
 def load_data(str_pref, sim_no):
+    print("\nLoading data ...")
     pos = []
     ens = []
 
@@ -72,7 +114,7 @@ def build_gp():
     gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, normalize_y=True)
 
 
-def main():
+def main(arguments):
     """
     Run adaptive MD using GP and uncertainty estimates
     """
@@ -82,29 +124,13 @@ def main():
     str_pref = os.environ['PROJDIR'] + '/data/H2_DFT/temp_data/store/'
     sim_no = 201  # total number of data points
 
-    # scf params
-    pref = 'si'
-    pseudo_dir = '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
-    pseudo_dir = '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0'
-    outdir = '/n/home03/jonpvandermause/Cluster/Si_Supercell_SCF'
-    alat = 5.431  # lattice parameter of si in angstrom
-    ecut = 18.0  # plane wave cutoff energy
-    nk = 8  # size of kpoint grid
-    dim = 4  # size of supercell
-    nat = 2 * dim ** 3
-
-    pw_loc = '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
-    in_name = 'si.scf.in'
-    out_name = 'si.scf.out'
-    sh_name = 'Si_Super.sh'
-    partition = 'kaxiras'
-    memory = 1000
-    email = 'torrisi@g.harvard.edu'
+    # define scf params
+    set_scf(arguments=arguments)
 
     # set up data
     x_train, y_train, atoms = load_data(str_pref, sim_no)
 
-    # build gp model
+    # build gaussian process model
     gp = build_gp()
 
     # fit
@@ -117,6 +143,7 @@ def main():
                           threshold=0)
 
     # run
+    print("\nRunning MD engine...")
     GP_engine.run(1, .1)
 
 
@@ -124,8 +151,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--partition', type=str, default='kozinsky')
 
     args = parser.parse_args()
     print(args)
 
-    main()
+    main(arguments=args)
