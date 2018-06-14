@@ -144,8 +144,8 @@ def main(arguments):
     """
 
     # params
-    ev2kcal = 1 / 0.043
-    str_pref = os.environ['PROJDIR']+'/Aluminium_Dataset/Store/'
+    # str_pref = os.environ['PROJDIR']+'/Aluminium_Dataset/Store/'
+    str_pref = arguments.data_dir
     sim_no = 201  # total number of data points
 
     # define scf params
@@ -178,12 +178,15 @@ if __name__ == '__main__':
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--partition', type=str, default='kozinsky')
-    parser.add_argument('--length_scale', type=float, default=10)
-    parser.add_argument('--length_scale_min', type=str, default=1e-2)
-    parser.add_argument('--length_scale_max', type=str, default=1e2)
-    parser.add_argument('--verbosity', type=int, default=1)
+    parser.add_argument('--data_dir', type=str, default='.', help='directory where training data are located')
+    parser.add_argument('--length_scale', type=float, default=10, help='length-scale of Gaussian Process')
+    parser.add_argument('--length_scale_min', type=str, default=1e-2,
+                        help='minimum of range of hyperparams for GP length-scale to optimize')
+    parser.add_argument('--length_scale_max', type=str, default=1e2,
+                        help='maximum of range of hyperparams for GP length-scale to optimize')
+    parser.add_argument('--verbosity', type=int, default=1, help='1 to 5')
 
     args = parser.parse_args()
-    print(args)
+    print("\nArguments: ", args, "\n")
 
     main(arguments=args)
