@@ -98,17 +98,16 @@ class MD_engine():
         if self.model == 'SHO':
             return SHO_energy(atoms)
 
-        #######
-        # Below are 'hooks' where we will later plug in to our machine learning models
-        #######
+        # Gaussian Process
         if self.model == 'GP':
-            pass
-            # config = GP_config(positions)
-            # energy, uncertainty = GP_energ(config, self.ML_model)
-            # if np.norm(uncertainty) > .01:
-            #     print("Warning: Uncertainty cutoff found.")
-            #
-            # return GP_energy(config, self.ML_model)
+            config = GP_config(self.atoms, self.cell)
+            energy, sigma = GP_energy(config, self.ML_model)
+
+            # Check sigma bound
+            if la.norm(sigma) > .01:
+                print("Warning: Uncertainty cutoff reached: sigma = {}".format(sigma))
+
+            return energy
 
         # Kernel Ridge Regression
         if self.model == "KRR":
@@ -365,7 +364,6 @@ class MD_engine():
 
         if self.model == "GP":
             pass
-
 
 
 class Atom():
@@ -646,13 +644,18 @@ def KRR_energy(krrconfig, model):
     return model.predict(krrconfig)
 
 
-def GP_config(positions):
-    pass
+def GP_config(atoms, cell):
+    coords = np.empty(shape=(3, len(atoms)))
+
+    for n in range(len(atoms)):
+        coords[:, n] = np.dot(la.inv(cell), atoms[n].position)
+
+    coords = coords.flatten()
+    coords = coords.reshape(1, -1)
+    print(coords.shape)
+
+    return coords
 
 
-def GP_energy():
-    pass
-
-
-def get_config_uncertainty():
-    pass
+def GP_energy(gpconfig, model):
+    return model.predict(gpconfig, return_std=True)

@@ -95,11 +95,13 @@ def load_data(str_pref, sim_no):
         pos_curr = pos_curr.flatten()
         pos.append(pos_curr)
 
+    print(pos[0])
+    print(pos[0].shape)
     print("Number of training points: {}".format(len(pos)))
 
     # convert to np arrays
-    ens = np.array(ens)
-    pos = np.array(pos)
+    pos = np.reshape(pos, (sim_no, pos[0].shape[0]))
+    ens = np.reshape(ens, (sim_no, 1))
 
     alat = 4.10
     Npos = 15
