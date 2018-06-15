@@ -19,23 +19,13 @@ import os
 import numpy as np
 from matplotlib import pyplot as plt
 
-
-# suppress sklearn warnings
-def warn(*args, **kwargs):
-    pass
-
-
-import warnings
-
-warnings.warn = warn
-
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, Matern, ExpSineSquared
 from KRR_reproduce import *
 
 # params
-kernel_choice = 'rbf'  # specify either c_rbf, rbf, matern or expsinesquared
+kernel_choice = 'matern15'  # specify either c_rbf, rbf, matern or expsinesquared
 m = 7  # number of training points
 
 # setup
@@ -91,9 +81,13 @@ x_train_list = [data[n] for n in train_indices]
 # build gp w/ a noiseless kernel and print properties
 kernel_dict = {
     'c_rbf': C(1.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2)),
-    'rbf': RBF(length_scale=10, length_scale_bounds=(1e-2, 1e2)),
-    'matern': Matern(length_scale=10, length_scale_bounds=(1e-2, 1e2),
-                     nu=10),
+    'rbf': RBF(length_scale=10, length_scale_bounds=(1e-3, 1e3)),
+    'matern15': Matern(length_scale=10, length_scale_bounds=(1e-3, 1e3),
+                     nu=1.5),
+    'matern25': Matern(length_scale=10, length_scale_bounds=(1e-3, 1e3),
+                       nu=2.5),
+    'maternlarge': Matern(length_scale=10, length_scale_bounds=(1e-3, 1e3),
+                       nu=10),
     'expsinesquared': ExpSineSquared(length_scale=1.0, periodicity=3.0,
                                      length_scale_bounds=(1e-2, 1e2),
                                      periodicity_bounds=(1e-2, 1e2))}

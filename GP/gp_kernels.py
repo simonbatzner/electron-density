@@ -19,16 +19,6 @@ import os
 import numpy as np
 from matplotlib import pyplot as plt
 
-
-# suppress sklearn warnings
-def warn(*args, **kwargs):
-    pass
-
-
-import warnings
-
-warnings.warn = warn
-
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, Matern, ExpSineSquared
@@ -98,11 +88,10 @@ kernel_mat = [C(1.0, (1e-3, 1e3)) * RBF(10, (1e-2, 1e2)),
                              periodicity_bounds=(1e-2, 1e2))]
 
 for fig_index, kernel in enumerate(kernel_mat):
-
-    #build gp
+    # build gp
     gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, normalize_y=True)
 
-    #plot prior
+    # plot prior
     plt.figure(fig_index, figsize=(8, 8))
     plt.subplot(2, 1, 1)
     X_ = np.array(seps)
@@ -138,4 +127,3 @@ for fig_index, kernel in enumerate(kernel_mat):
     plt.tight_layout()
 
 plt.show()
-
