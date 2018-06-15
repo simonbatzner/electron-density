@@ -168,6 +168,7 @@ class MD_engine():
                     if self.verbosity == 5:
                         print("Just assigned force on atom's coordinate", coord, " to be ",
                               -first_derivative_2nd(Eminus, Eplus, self.dx))
+
         # Fourth-order finite-difference accuracy
         if self.fd_accuracy == 4:
             for atom in atoms:
@@ -271,12 +272,11 @@ class MD_engine():
                 if valid:
                     continue
                 else:
-                    pass
-                    # take_timestep(-dt)
-                    # self.time -= dt
-                    # run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
-                    #              iscorrection=True)
-                    # self.retrain_ml_model()
+                    take_timestep(-dt)
+                    self.time -= dt
+                    run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
+                                 iscorrection=True)
+                    self.retrain_ml_model()
 
     def assert_boundary_conditions(self):
         """
