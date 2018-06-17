@@ -144,6 +144,7 @@ class MD_engine():
             return
 
         E0 = self.get_config_energy(self.atoms)
+
         if self.verbosity == 4: print('E0:', E0)
         atoms = self.atoms
 
@@ -265,14 +266,17 @@ class MD_engine():
             if self.verbosity >= 3:
                 self.print_positions()
 
-            # WHERE ML-BASED UNCERTAINTY COMES INTO PLAY
+            # check uncertainty and retrain model if it exceeds specified threshold
             if (self.model == 'GP' or self.model == 'KRR') and self.threshold > 0:
 
                 valid = self.gauge_uncertainty()
+
                 if valid:
                     continue
+
+                # move to previous md step, compute DFT, update training set, retrain ML model
                 else:
-                    take_timestep(-dt)
+                    self.take_timestep(-dt)
                     self.time -= dt
                     run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
                                  iscorrection=True)
@@ -323,7 +327,7 @@ class MD_engine():
             else:
                 print('Atom %d:' % n, np.round(pos, decimals=4))
 
-    def gauge_model_uncertainty(self):
+    def gauge_uncertainty(self):
         """
         For later implementation with the Gaussian Process model.
         Will check to see if the uncertainty of the model's prediction of the energy
@@ -341,13 +345,23 @@ class MD_engine():
             #     return False
 
         if self.model == "GP":
-            pass
+
+            config = GP_config(self.atoms, self.cell)
+            energy, sigma = GP_energy(config, self.ML_model)
+
+            if self.threshold < sigma:
+                print("CAUTION: The uncertainty of the model is outside of the specified threshold")
+                return False
 
         return True
 
     def retrain_ml_model(self, model=None, ML_model=None):
-        model = model or self.model
-        ML_model = ML_model or self.ML_model
+        """"
+        If uncertainty has surpassed cutoff value, update training set and retrain ML model
+        """
+
+        # model = model or self.model
+        # ML_model = ML_model or self.ML_model
 
         if self.model == 'KRR':
             # init_train_set = self.ML_model.original_train_set
@@ -363,7 +377,19 @@ class MD_engine():
             pass
 
         if self.model == "GP":
-            pass
+            # update training set
+            x_init = self.ML_model.original_train_set
+            y_init = self.ML_model.original_train_ens
+
+            x_add, y_add = get_aug_values(self.espresso_config.correction_folder)
+
+            x_upd = np.concatenate(x_init, x_add)
+            y_upd = np.concatenate(y_init, y_add)
+
+            # retrain
+            self.ML_model.fit(x_upd, y_upd)
+
+            return
 
 
 class Atom():
@@ -422,18 +448,19 @@ class Atom():
 
 class ESPRESSO_config(object):
     def get_correction_number(self):
-
         folders_in_correction_folder = list(os.walk(self.correction_folder))[0][1]
-        steps = [fold for fold in folders_in_correction_folder if "step_" in fold]
+
+        steps = [fold for fold in folders_in_correction_folder if self.system_name + "_step_" in fold]
+
         if len(steps) >= 1:
             stepvals = [int(fold.split('_')[-1]) for fold in steps]
             correction_number = max(stepvals)
         else:
-            correction_number = 0
-        return correction_number
+            return 0
+        return correction_number + 1
 
     def __init__(self, workdir=None, run_pwscf=None, pseudopotentials=None,
-                 molecule=False, nk=15, correction_folder=None, correction_number=0):
+                 molecule=False, nk=15, correction_folder=None, system_name="", correction_number=0, ecut=40, ):
 
         # Where to store QE calculations
         self.workdir = os.environ['PROJDIR'] + '/AIMD'
@@ -453,9 +480,15 @@ class ESPRESSO_config(object):
         # Dimensions of k point grid
         self.nk = nk
 
+        # Will be used for correction folders later
+
+        self.system_name = system_name
+
         self.correction_folder = correction_folder or self.workdir
 
         self.correction_number = self.get_correction_number()
+
+        self.ecut = ecut
 
 
 # set to None for simon running tests locally, else use both lines
@@ -659,3 +692,35 @@ def GP_config(atoms, cell):
 
 def GP_energy(gpconfig, model):
     return model.predict(gpconfig, return_std=True)
+
+
+def get_aug_values(correction_folder, keyword='step', ML_model=None):
+    energies = []
+    positions = []
+    forces = []
+    indices = []
+    if len([folder for folder in list(os.walk(correction_folder))[0][1]]) > 0:
+        for fold in [folder for folder in list(os.walk(correction_folder))[0][1] if keyword in folder]:
+            index = int(fold.split("_")[-1])
+            if ML_model != None:
+                if index not in ML_model.aug_indices:
+                    ML_model.aug_indices.append(index)
+                else:
+                    continue
+            fold = correction_folder + '/' + fold
+            print(fold)
+            with open(fold + '/en', 'r') as f:
+                energies.append(float(f.readlines()[0]))
+
+            with open(fold + '/pos', 'r') as f:
+                read_pos = f.readlines()
+                for n in range(len(read_pos)):
+                    curr_pos = read_pos[n].strip().strip('[').strip('\n').strip(']')
+                    print(curr_pos)
+                    curr_pos = [float(x) for x in curr_pos.split()]
+                    for x in curr_pos:
+                        positions.append(x)
+
+            print("Found positions", positions, "and energies", energies)
+
+            return positions, energies
