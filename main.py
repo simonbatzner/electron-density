@@ -24,26 +24,31 @@ import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF
 
-from utility import Atom, MD_engine
+from utility import Atom, MD_engine, ESPRESSO_config
 
 
 def set_scf(arguments):
     """"
     Set constants used for SCF
     """
-    global pref, pseudo_dir, outdir, alat, ecut, nk, dim, nat, pw_loc, in_name, out_name, sh_name, partition, memory, email
 
-    alat = 5.431  # lattice parameter of si in angstrom
+    # system params
+    global ecut, nk, dim, config, alat
     ecut = 18.0  # plane wave cutoff energy
     nk = 8  # size of kpoint grid
     dim = 4  # size of supercell
+
+    config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name)
+
+    alat = 5.431  # lattice parameter of si in angstrom
     nat = 2 * dim ** 3
     memory = 1000
 
-    pref = 'si'
-    in_name = 'si.scf.in'
-    out_name = 'si.scf.out'
-    sh_name = 'Si_Super.sh'
+    # run params
+    pref = arguments.system_name
+    in_name = ".".join([arguments.system_name, 'scf', 'in'])
+    out_name = ".".join([arguments.system_name, 'scf', 'out'])
+    sh_name = ".".join([arguments.system_name, 'sh'])
     partition = arguments.partition
 
     if partition == 'kozinsky':
@@ -166,7 +171,8 @@ def main(arguments):
 
     # build MD engine
     GP_engine = MD_engine(cell=alat * np.eye(3), input_atoms=atoms, ML_model=gp, model='GP',
-                          store_trajectory=True, verbosity=arguments.verbosity, assert_boundaries=False, dx=.1,
+                          store_trajectory=True, espresso_config=config, verbosity=arguments.verbosity,
+                          assert_boundaries=False, dx=.1,
                           fd_accuracy=4,
                           threshold=0)
 
@@ -180,6 +186,7 @@ if __name__ == '__main__':
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--partition', type=str, default='kozinsky')
+    parser.add_argument('--system_name', type=str, default='system')
     parser.add_argument('--data_dir', type=str, default='.', help='directory where training data are located')
     parser.add_argument('--length_scale', type=float, default=10, help='length-scale of Gaussian Process')
     parser.add_argument('--length_scale_min', type=str, default=1e-2,
@@ -191,4 +198,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print("\nArguments: ", args, "\n")
 
+    global pref, pseudo_dir, outdir, alat, ecut, nk, dim, nat, pw_loc, in_name, out_name, sh_name, partition, memory, email, config
     main(arguments=args)
