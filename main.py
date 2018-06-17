@@ -174,7 +174,7 @@ def main(arguments):
                           store_trajectory=True, espresso_config=config, verbosity=arguments.verbosity,
                           assert_boundaries=False, dx=.1,
                           fd_accuracy=4,
-                          threshold=0)
+                          threshold=0.1)
 
     # run MD engine
     print("\nRunning MD engine...")
@@ -193,7 +193,7 @@ if __name__ == '__main__':
                         help='minimum of range of hyperparams for GP length-scale to optimize')
     parser.add_argument('--length_scale_max', type=str, default=1e2,
                         help='maximum of range of hyperparams for GP length-scale to optimize')
-    parser.add_argument('--verbosity', type=int, default=1, help='1 to 5')
+    parser.add_argument('--verbosity', type=int, default=5, help='1 to 5')
 
     args = parser.parse_args()
     print("\nArguments: ", args, "\n")

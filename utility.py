@@ -7,12 +7,15 @@
 Simon Batzner, Steven Torrisi, Jon Vandermause
 """
 
+import os
+
+import numpy as np
 import numpy.random as rand
 import numpy.linalg as la
 from ase import Atoms
 
-from project_pwscf import *
-from project_objects import *
+from util.project_objects import *
+from util.project_pwscf import *
 from Solid_State import KRR_reproduce
 from Solid_State import KRR_Functions
 
@@ -272,6 +275,8 @@ class MD_engine():
                 valid = self.gauge_uncertainty()
 
                 if valid:
+                    if self.verbosity == 5:
+                        print("Uncertainty valid")
                     continue
 
                 # move to previous md step, compute DFT, update training set, retrain ML model
@@ -580,6 +585,9 @@ def run_espresso(atoms, cell, qe_config=config2, ecut=40, molecule=True, stepcou
                                params=input_params, kpoints=kpts,
                                ncpu=1)
     output = parse_qe_pwscf_output(outfile=output_file)
+
+    print("Parsed QE output file... ")
+
     with open(runpath.path + 'en', 'w') as f:
         f.write(str(output['energy']))
     with open(runpath.path + 'pos', 'w')as f:
