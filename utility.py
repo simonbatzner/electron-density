@@ -281,6 +281,9 @@ class MD_engine():
 
                 # move to previous md step, compute DFT, update training set, retrain ML model
                 else:
+                    if self.verbosity == 5:
+                        print("Uncertainty invalid, computing DFT")
+
                     self.take_timestep(-dt)
                     self.time -= dt
                     run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,

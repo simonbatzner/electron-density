@@ -35,9 +35,9 @@ def set_scf(arguments):
     # system params
     global ecut, nk, dim, config, alat
     ecut = 18.0  # plane wave cutoff energy
-    ecut = 10 # just for testing
+    # ecut = 10 # just for testing
     nk = 8  # size of kpoint grid
-    nk = 2 # just for testing
+    # nk = 2 # just for testing
     dim = 4  # size of supercell
 
     config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name)
