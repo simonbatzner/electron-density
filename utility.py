@@ -388,8 +388,10 @@ class MD_engine():
 
             x_add, y_add = get_aug_values(self.espresso_config.correction_folder)
 
-            x_upd = np.concatenate(x_init, x_add)
-            y_upd = np.concatenate(y_init, y_add)
+            print(np.asarray(x_add)[:, None].T.shape)
+            print(np.asarray(x_init).shape)
+            x_upd = np.concatenate((x_init, np.asarray(x_add)[:, None].T), axis=0)
+            y_upd = np.concatenate((y_init, np.asarray(y_add)[:, None]), axis=0)
 
             # retrain
             self.ML_model.fit(x_upd, y_upd)

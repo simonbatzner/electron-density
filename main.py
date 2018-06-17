@@ -35,7 +35,9 @@ def set_scf(arguments):
     # system params
     global ecut, nk, dim, config, alat
     ecut = 18.0  # plane wave cutoff energy
+    ecut = 10 # just for testing
     nk = 8  # size of kpoint grid
+    nk = 2 # just for testing
     dim = 4  # size of supercell
 
     config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name)
@@ -164,6 +166,10 @@ def main(arguments):
     # build gaussian process model
     gp = build_gp(length_scale=arguments.length_scale, length_scale_min=arguments.length_scale_min,
                   length_scale_max=arguments.length_scale_max, verbosity=arguments.verbosity)
+
+    gp.original_train_set = x_train
+    gp.original_train_ens = y_train
+
 
     # train model
     print("\nFitting GP...")
