@@ -162,11 +162,11 @@ def build_gp(arguments):
     if arguments.verbosity:
         print("\n================================================================")
         print("\nKernel: {}".format(kernel))
-        print("Hyperparameters: \n")
+        print("\nHyperparameters:")
 
         for hyperparameter in kernel.hyperparameters:
             print(hyperparameter)
-        print("Parameters:\n")
+        print("\nParameters:")
 
         params = kernel.get_params()
         for key in sorted(params):
@@ -214,7 +214,7 @@ def main(arguments):
                           threshold=0.1)
 
     # run MD engine
-    print("\nRunning MD engine...")
+    print("\nRunning MD engine...\n")
     GP_engine.run(1, .1)
 
 

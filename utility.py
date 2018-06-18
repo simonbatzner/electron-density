@@ -137,7 +137,7 @@ class MD_engine():
 
         E0 = self.get_config_energy(self.atoms)
 
-        if self.verbosity == 4: print('E0:', E0)
+        if self.verbosity >= 4: print('E0:', E0)
         atoms = self.atoms
 
         # Finite-Difference Approx., 2nd/ 4th order as specified
@@ -204,9 +204,9 @@ class MD_engine():
                     atom.position[coord] += atom.velocity[coord] * dt + atom.force[coord] * dt ** 2 / atom.mass
                     atom.velocity[coord] += atom.force[coord] * dt / atom.mass
 
-        ####################################################################################
+        ################################################################################################################
         # Superior Verlet integration, ref: https://en.wikipedia.org/wiki/Verlet_integration
-        ####################################################################################
+        ################################################################################################################
         elif method == 'Verlet':
             for atom in self.atoms:
                 for coord in range(3):
@@ -233,7 +233,12 @@ class MD_engine():
 
         # TODO: DISCUSS W/ STEVEN HOW TO HANDLE STEPS
         n_step = 0
+
         if self.time == 0:
+
+            if self.verbosity == 5:
+                print("\n======================================\nStep: {}".format(n_step))
+                print("Current time: {}\n".format(self.time))
 
             # Very first timestep often doesn't have the 'previous position' to use, instead use third-order Euler method
             # using information about the position, velocity (if provided) and force
@@ -250,8 +255,11 @@ class MD_engine():
             n_step += 1
 
         while self.time < tf:
+
             if self.verbosity == 5:
-                print("Current time: {}".format(self.time))
+                print("\n======================================\nStep: {}".format(n_step))
+                print("Current time: {}\n".format(self.time))
+
 
             self.update_atom_forces()
             self.take_timestep(dt)
@@ -271,7 +279,7 @@ class MD_engine():
                 # move to previous md step, compute DFT, update training set, retrain ML model
                 else:
                     if self.verbosity == 5:
-                        print("Uncertainty invalid, computing DFT")
+                        print("Uncertainty invalid, computing DFT\n")
 
                     self.take_timestep(-dt)
                     self.time -= dt
@@ -350,7 +358,7 @@ class MD_engine():
             energy, sigma = GP_energy(config, self.ML_model)
 
             if self.threshold < sigma:
-                print("CAUTION: The uncertainty of the model is outside of the specified threshold")
+                print("\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}".format(sigma))
                 return False
 
         return True
@@ -501,11 +509,11 @@ class ESPRESSO_config(object):
 
         # Where to store QE calculations
         self.workdir = os.environ['PROJDIR'] + '/AIMD'
-        print("Working directory initialized: {}".format(self.workdir))
+        print("\nWorking directory initialized: {}".format(self.workdir))
 
         # Runs the PWSCF
         self.run_pwscf = os.environ['PWSCF_COMMAND']
-        print("PWSCF_COMMAND: {}".format(self.run_pwscf))
+        print("\nPWSCF_COMMAND: {}".format(self.run_pwscf))
 
         # Helpful dictionary of pseudopotential objects
         self.pseudopotentials = {"H": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='uspp', element='H',
@@ -526,13 +534,13 @@ class ESPRESSO_config(object):
         # Will be used for correction folders later
         # TODO: WHAT IS THE CORRECTION FOLDERS PURPOSE?
         self.system_name = system_name
-        print("System name: {}".format(self.system_name))
+        print("\nSystem name: {}".format(self.system_name.title()))
 
         self.correction_folder = correction_folder or self.workdir
-        print("Correction folder: {}".format(self.correction_folder))
+        print("\nCorrection folder: {}".format(self.correction_folder))
 
         self.correction_number = self.get_correction_number()
-        print("Correction number: {}".format(self.correction_number))
+        print("\nCorrection number: {}".format(self.correction_number))
 
         self.ecut = ecut
 
@@ -560,7 +568,7 @@ def first_derivative_4th(fmm, fm, fp, fpp, h):
 
 def run_espresso(atoms, cell, qe_config=None, ecut=40, molecule=True, stepcount=0, iscorrection=False):
     """
-    Run QE w/ specified configuratioin
+    Run QE w/ specified configuration
     """
 
     # TODO W/ STEVEN: WE'RE CONSTRUCTING THIS PSEUDOPOT DICTIONARY EVERY TIME FROM SCRATCH, WAY AROUND THAT?
@@ -754,8 +762,6 @@ def GP_config(atoms, cell):
 
     coords = coords.flatten()
     coords = coords.reshape(1, -1)
-    print(coords.shape)
-
     return coords
 
 
