@@ -1,5 +1,6 @@
 from objects import *
 import numpy
+import os
 
 
 class PWscf_inparam(Param):
@@ -132,8 +133,6 @@ def parse_qe_pwscf_output(outfile):
 				line=line.split('(')[0]
 				line=line.strip()
 				volume   = float(line)
-
-
 				
 			## Chunk of code meant to get the final coordinates of the atomic positions
 			if line.lower().startswith('begin final coordinates'):
