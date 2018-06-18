@@ -380,7 +380,7 @@ class MD_engine():
             energy, sigma = GP_energy(config, self.ML_model)
 
             if self.threshold < sigma:
-                print("\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}".format(sigma))
+                print("\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}\n".format(sigma[0]))
                 return False
 
         return True
@@ -809,7 +809,8 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
                 else:
                     continue
             fold = correction_folder + '/' + fold
-            print(fold)
+
+            # print("\nFolder: {}\n".format(fold))
             with open(fold + '/en', 'r') as f:
                 energies.append(float(f.readlines()[0]))
 
@@ -817,11 +818,10 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
                 read_pos = f.readlines()
                 for n in range(len(read_pos)):
                     curr_pos = read_pos[n].strip().strip('[').strip('\n').strip(']')
-                    print(curr_pos)
+                    # print(curr_pos)
                     curr_pos = [float(x) for x in curr_pos.split()]
                     for x in curr_pos:
                         positions.append(x)
 
-            print("Found positions", positions, "and energies", energies)
-
+            # print("\nFound positions: {}\nFound energies:  {}\n".format(positions, energies))
             return positions, energies

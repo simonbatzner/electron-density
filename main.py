@@ -248,9 +248,9 @@ def parse_args():
     parser.add_argument('--kernel', type=str, default='rbf',
                         help='GP kernel: "rbf", "matern", "c_rbf" or "expsinesquared"')
     parser.add_argument('--length_scale', type=float, default=10, help='length-scale of Gaussian Process')
-    parser.add_argument('--length_scale_min', type=float, default=1e-2,
+    parser.add_argument('--length_scale_min', type=float, default=1e-3,
                         help='minimum of range for length-scale')
-    parser.add_argument('--length_scale_max', type=float, default=1e2,
+    parser.add_argument('--length_scale_max', type=float, default=1e3,
                         help='maximum of range for length-scale')
     parser.add_argument('--nu', type=float, default=1.5,
                         help='nu param in matern kernel')
