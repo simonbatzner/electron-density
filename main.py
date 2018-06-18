@@ -22,7 +22,7 @@ import argparse
 import numpy as np
 
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF
+from sklearn.gaussian_process.kernels import RBF, Matern, ExpSineSquared, ConstantKernel as C
 
 from utility import Atom, MD_engine, ESPRESSO_config
 
@@ -38,10 +38,10 @@ def set_scf(arguments):
     nk = 8  # size of kpoint grid
     dim = 4  # size of supercell
 
-    # debug config
-    ecut = 5.0
-    nk = 1
-    dim = 4
+    # # debug config
+    # ecut = 5.0
+    # nk = 1
+    # dim = 4
 
     config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name)
 
@@ -124,22 +124,36 @@ def load_data(str_pref, sim_no, arguments):
     input_atoms = []
 
     for n in range(n_atoms):
-        print(n * 3)
-        print(n * 3 + 3)
-        print(arguments.system_name.title())
-        input_atoms.append(Atom(position=pos[0][(n*3):(n*3+3)] * alat, element=str(arguments.system_name.title().strip('"\''))))
-        
+        input_atoms.append(
+            Atom(position=pos[0][(n * 3):(n * 3 + 3)] * alat, element=str(arguments.system_name.title().strip('"\''))))
+
     return pos, ens, input_atoms
 
 
-def build_gp(length_scale, length_scale_min, length_scale_max, verbosity):
+def build_gp(arguments):
     """
     Build Gaussian Process using scikit-learn, print hyperparams and return model
     :return: gp model
     """
-    kernel = RBF(length_scale=length_scale, length_scale_bounds=(length_scale_min, length_scale_max))
 
-    if verbosity:
+    kernel_dict = {'c_rbf': C(arguments.const_val, (arguments.const_val_min, arguments.const_val_max)) * RBF(
+        length_scale=arguments.length_scale, length_scale_bounds=(
+            arguments.length_scale_min, arguments.length_scale_max)),
+                   'rbf': RBF(length_scale=arguments.length_scale,
+                              length_scale_bounds=(arguments.length_scale_min, arguments.length_scale_max)),
+                   'matern': Matern(length_scale=arguments.length_scale,
+                                    length_scale_bounds=(arguments.length_scale_min, arguments.length_scale_max),
+                                    nu=arguments.nu),
+                   'expsinesquared': ExpSineSquared(length_scale=arguments.length_scale,
+                                                    periodicity=arguments.periodicity,
+                                                    length_scale_bounds=(
+                                                        arguments.length_scale_min, arguments.length_scale_max),
+                                                    periodicity_bounds=(
+                                                        arguments.periodicity_min, arguments.periodicity_max))}
+
+    kernel = kernel_dict[arguments.kernel]
+
+    if arguments.verbosity:
         print("\n================================================================")
         print("\nKernel: {}".format(kernel))
         print("Hyperparameters: \n")
@@ -175,12 +189,10 @@ def main(arguments):
     x_train, y_train, input_atoms = load_data(str_pref=str_pref, sim_no=sim_no, arguments=arguments)
 
     # build gaussian process model
-    gp = build_gp(length_scale=arguments.length_scale, length_scale_min=arguments.length_scale_min,
-                  length_scale_max=arguments.length_scale_max, verbosity=arguments.verbosity)
+    gp = build_gp(arguments)
 
     gp.original_train_set = x_train
     gp.original_train_ens = y_train
-
 
     # train model
     print("\nFitting GP...")
@@ -203,13 +215,29 @@ if __name__ == '__main__':
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--partition', type=str, default='kozinsky')
-    parser.add_argument('--system_name', type=str, default='Al')
     parser.add_argument('--data_dir', type=str, default='.', help='directory where training data are located')
+    parser.add_argument('--system_name', type=str, default='Al')
+    parser.add_argument('--kernel', type=str, default='rbf',
+                        help='GP kernel: "rbf", "matern", "c_rbf" or "expsinesquared"')
     parser.add_argument('--length_scale', type=float, default=10, help='length-scale of Gaussian Process')
-    parser.add_argument('--length_scale_min', type=str, default=1e-2,
-                        help='minimum of range of hyperparams for GP length-scale to optimize')
-    parser.add_argument('--length_scale_max', type=str, default=1e2,
-                        help='maximum of range of hyperparams for GP length-scale to optimize')
+    parser.add_argument('--length_scale_min', type=float, default=1e-2,
+                        help='minimum of range for length-scale')
+    parser.add_argument('--length_scale_max', type=float, default=1e2,
+                        help='maximum of range for length-scale')
+    parser.add_argument('--nu', type=float, default=1.5,
+                        help='nu param in matern kernel')
+    parser.add_argument('--const_val', type=float, default=1.,
+                        help='constant value for constant kernel')
+    parser.add_argument('--const_val_min', type=float, default=1e-2,
+                        help='miminum of range for constant value for constant kernel')
+    parser.add_argument('--const_val_max', type=float, default=1e2,
+                        help='maximum of range for constant value for constant kernel')
+    parser.add_argument('--periodicity', type=float, default=1.,
+                        help='periodicity for expsinesquared kernel')
+    parser.add_argument('--periodicity_min', type=float, default=1e-2,
+                        help='miminum of range for periodicity for expsinesquared kernel')
+    parser.add_argument('--periodicity_max', type=float, default=1e2,
+                        help='maximum of range for periodicity for expsinesquared kernel')
     parser.add_argument('--verbosity', type=int, default=5, help='1 to 5')
     parser.add_argument('--alat', type=float, default=4.10)
 
