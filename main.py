@@ -209,11 +209,16 @@ def main(arguments):
     print("\nRunning MD engine...")
     GP_engine.run(1, .1)
 
+def parse_args():
+    """
+    Parse command line arguments
+    """
 
-if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
+
+
     parser.add_argument('--partition', type=str, default='kozinsky')
     parser.add_argument('--data_dir', type=str, default='.', help='directory where training data are located')
     parser.add_argument('--system_name', type=str, default='Al')
@@ -242,7 +247,11 @@ if __name__ == '__main__':
     parser.add_argument('--alat', type=float, default=4.10)
 
     args = parser.parse_args()
-    print("\nArguments: ", args, "\n")
+    return args
 
+
+if __name__ == '__main__':
     global pref, pseudo_dir, outdir, alat, ecut, nk, dim, nat, pw_loc, in_name, out_name, sh_name, partition, memory, email, config
-    main(arguments=args)
+
+    arguments = parse_args()
+    main(arguments=arguments)
