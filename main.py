@@ -12,6 +12,20 @@
 Simon Batzner, Steven Torrisi, Jon Vandermause
 """
 
+
+########################################################################################################################
+# GENERAL TO-DOs:
+#
+# 1. as soon as we have force rep, we need to transition models from E to F; this especially concernes uncertainty
+# handling (currently done redudantly for E) and the finite-difference approx currently used to get F
+#
+# 2. set up project_pwscf.py for parallel and serial runs
+#
+# 3. integrate partition params w/ run config, currenlty all is done via environment variables
+#
+# 4. migrate regression modules to own module
+########################################################################################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
