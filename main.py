@@ -35,14 +35,17 @@ def set_scf(arguments):
     # system params
     global ecut, nk, dim, config, alat
     ecut = 18.0  # plane wave cutoff energy
-    # ecut = 10 # just for testing
     nk = 8  # size of kpoint grid
-    # nk = 2 # just for testing
     dim = 4  # size of supercell
+
+    # debug config
+    ecut = 5.0
+    nk = 1
+    dim = 4
 
     config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name)
 
-    alat = 5.431  # lattice parameter of si in angstrom
+    alat = arguments.alat
     nat = 2 * dim ** 3
     memory = 1000
 
@@ -84,7 +87,7 @@ def set_scf(arguments):
     return
 
 
-def load_data(str_pref, sim_no):
+def load_data(str_pref, sim_no, arguments):
     """"
     Load DFT data, set up input/target and convert to Atom representation
     """
@@ -102,23 +105,31 @@ def load_data(str_pref, sim_no):
         pos_curr = pos_curr.flatten()
         pos.append(pos_curr)
 
-    print(pos[0])
-    print(pos[0].shape)
     print("Number of training points: {}".format(len(pos)))
 
     # convert to np arrays
     pos = np.reshape(pos, (sim_no, pos[0].shape[0]))
     ens = np.reshape(ens, (sim_no, 1))
 
-    alat = 4.10
-    Npos = 15
-    Atom1 = Atom(position=pos[Npos][:3] * alat, element='Al')
-    Atom2 = Atom(position=pos[Npos][3:6] * alat, element='Al')
-    Atom3 = Atom(position=pos[Npos][6:9] * alat, element='Al')
-    Atom4 = Atom(position=pos[Npos][9:] * alat, element='Al')
-    atoms = [Atom1, Atom2, Atom3, Atom4]
+    # ASK STEVEN WHY NPOS = 15?
+    # Npos = 15
+    # Atom1 = Atom(position=pos[Npos][:3] * alat, element='Al')
+    # Atom2 = Atom(position=pos[Npos][3:6] * alat, element='Al')
+    # Atom3 = Atom(position=pos[Npos][6:9] * alat, element='Al')
+    # Atom4 = Atom(position=pos[Npos][9:] * alat, element='Al')
+    # input_atoms= [Atom1, Atom2, Atom3, Atom4]
 
-    return pos, ens, atoms
+    # starting config for MD engine
+    n_atoms = pos.shape[1] // 3
+    input_atoms = []
+
+    for n in range(n_atoms):
+        print(n * 3)
+        print(n * 3 + 3)
+        print(arguments.system_name.title())
+        input_atoms.append(Atom(position=pos[0][(n*3):(n*3+3)] * alat, element=str(arguments.system_name.title().strip('"\''))))
+        
+    return pos, ens, input_atoms
 
 
 def build_gp(length_scale, length_scale_min, length_scale_max, verbosity):
@@ -161,7 +172,7 @@ def main(arguments):
     set_scf(arguments=arguments)
 
     # set up data
-    x_train, y_train, atoms = load_data(str_pref, sim_no)
+    x_train, y_train, input_atoms = load_data(str_pref=str_pref, sim_no=sim_no, arguments=arguments)
 
     # build gaussian process model
     gp = build_gp(length_scale=arguments.length_scale, length_scale_min=arguments.length_scale_min,
@@ -176,7 +187,7 @@ def main(arguments):
     gp.fit(x_train, y_train)
 
     # build MD engine
-    GP_engine = MD_engine(cell=alat * np.eye(3), input_atoms=atoms, ML_model=gp, model='GP',
+    GP_engine = MD_engine(cell=alat * np.eye(3), input_atoms=input_atoms, ML_model=gp, model='GP',
                           store_trajectory=True, espresso_config=config, verbosity=arguments.verbosity,
                           assert_boundaries=False, dx=.1,
                           fd_accuracy=4,
@@ -192,7 +203,7 @@ if __name__ == '__main__':
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--partition', type=str, default='kozinsky')
-    parser.add_argument('--system_name', type=str, default='system')
+    parser.add_argument('--system_name', type=str, default='Al')
     parser.add_argument('--data_dir', type=str, default='.', help='directory where training data are located')
     parser.add_argument('--length_scale', type=float, default=10, help='length-scale of Gaussian Process')
     parser.add_argument('--length_scale_min', type=str, default=1e-2,
@@ -200,6 +211,7 @@ if __name__ == '__main__':
     parser.add_argument('--length_scale_max', type=str, default=1e2,
                         help='maximum of range of hyperparams for GP length-scale to optimize')
     parser.add_argument('--verbosity', type=int, default=5, help='1 to 5')
+    parser.add_argument('--alat', type=float, default=4.10)
 
     args = parser.parse_args()
     print("\nArguments: ", args, "\n")
