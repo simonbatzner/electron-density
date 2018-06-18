@@ -7,6 +7,7 @@
 Simon Batzner, Steven Torrisi, Jon Vandermause
 """
 
+# TODO: PROPERLY SET UP IMPORTS
 import os
 
 import numpy as np
@@ -47,7 +48,7 @@ class MD_engine():
         """
         self.verbosity = verbosity
 
-        self.atoms = input_atoms  # Instantiate internal list of atoms, populate via helper function
+        self.atoms = input_atoms
 
         for atom in input_atoms:
             if self.verbosity == 5:
@@ -87,14 +88,7 @@ class MD_engine():
 
     def get_config_energy(self, atoms):
         """
-        The positions of the atoms are passed to a given model of choice,
-        in which the positions are converted into the configuration which is
-        appropriate to be parsed by the model.
-
-        For instance, the positions may need to be converted into
-        atom-centered symmetry functions for the Gaussian Process model. By
-        passing in the positions, the necessary mapping is performed, and then
-        the appropriate model is called.
+        Transforms atomic positions to configuration, evaluates with specified model
         """
 
         # Simple Harmonic Oscillator
@@ -114,9 +108,7 @@ class MD_engine():
 
         # Kernel Ridge Regression
         if self.model == "KRR":
-            # Helper function which converts atom positions into a configuration
-            #  appropriate for the KRR model. Could then be modified
-            #  later depending on alternate representations.
+            # Convert to KRR input config
             config = KRR_config(self.atoms, self.cell)
             return KRR_energy(config, self.ML_model)
 
@@ -130,8 +122,7 @@ class MD_engine():
         and returns the gradient (and thus the force)
         via a finite-difference approximation.
 
-        Or, if the engine's model is ab-initio molecular dynamics,
-        runs quantum ESPRESSO on the current configuration and then
+        If the engine's is in AIMD config,  runs quantum ESPRESSO on the current configuration and then
         stores the forces output from ESPRESSO as the atomic forces.
         """
 
@@ -151,8 +142,7 @@ class MD_engine():
         if self.verbosity == 4: print('E0:', E0)
         atoms = self.atoms
 
-        # Depending on the finite difference accuracy specified at instantiation,
-        # perform either 2 or 4 potential energy calculations.
+        # Finite-Difference Approx., 2nd/ 4th order as specified
 
         # Second-order finite-difference accuracy
         if self.fd_accuracy == 2:
@@ -207,9 +197,7 @@ class MD_engine():
         """
         temp_num = 0.
 
-        # Third-order euler method
-        # Not the worst way to begin a Verlet run, see:
-        # https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
+        # Third-order euler method, ref: https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
 
         if method == 'TO_Euler':
             for atom in self.atoms:
@@ -218,10 +206,9 @@ class MD_engine():
                     atom.position[coord] += atom.velocity[coord] * dt + atom.force[coord] * dt ** 2 / atom.mass
                     atom.velocity[coord] += atom.force[coord] * dt / atom.mass
 
-        ######
-        # Superior Verlet integration
-        # Citation:  https://en.wikipedia.org/wiki/Verlet_integration
-        ######
+        ####################################################################################
+        # Superior Verlet integration, ref: https://en.wikipedia.org/wiki/Verlet_integration
+        ####################################################################################
         elif method == 'Verlet':
             for atom in self.atoms:
                 for coord in range(3):
@@ -244,8 +231,7 @@ class MD_engine():
     def run(self, tf, dt):
         """
         Handles timestepping; at each step, calculates the force and then
-        advances via the take_timestep method.
-
+        advances via the take_timestep method
         """
 
         # The very first timestep often doesn't have the 'previous position' to use,
@@ -337,21 +323,21 @@ class MD_engine():
 
     def gauge_uncertainty(self):
         """
-        For later implementation with the Gaussian Process model.
-        Will check to see if the uncertainty of the model's prediction of the energy
-        within a given configuration is within an acceptable bound given by threshold.
-
-        If it is unacceptable, the current configuration is exported into a Quantum ESPRESSO run,
-        which is then added into the ML dataset and the model is re-trained.
+        Ceck if prediction's uncertainty is within an acceptable bound given by threshold.
+        If not, run QE, add to training set and retrain ML model
         """
+
+        # Kernel Ridge Regression
         if self.model == "KRR":
             pass
+            # @STEVEN: I commented this out since it gave errors, can you update it, thanks!
             #
             # config = KRR.config(self.atoms, self.cell)
             # if self.threshold < KRR_uncertainty(configuration):
             #     print("!! The uncertainty of the model is outside of the ")
             #     return False
 
+        # Gaussian Process
         if self.model == "GP":
 
             config = GP_config(self.atoms, self.cell)
@@ -371,7 +357,10 @@ class MD_engine():
         # model = model or self.model
         # ML_model = ML_model or self.ML_model
 
+        # Kernel Ridge Regression
         if self.model == 'KRR':
+            # @STEVEN: I commented this out since it gave errors, can you update it, thanks!
+
             # init_train_set = self.ML_model.original_train_set
             # init_train_ens = self.ML_model.original_train_ens
             #
@@ -384,7 +373,9 @@ class MD_engine():
             # return
             pass
 
+        # Gaussian Process
         if self.model == "GP":
+
             # update training set
             x_init = self.ML_model.original_train_set
             y_init = self.ML_model.original_train_ens
@@ -403,6 +394,10 @@ class MD_engine():
 
 
 class Atom():
+    """
+    Class that holds basic information on atoms in the system
+    # TODO: ADD ARGUMENTS TO DOC
+    """
     mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855}
 
     def __init__(self, position=[0., 0., 0.], velocity=[0., 0., 0.], force=[0., 0., 0.], initial_pos=[0, 0, 0],
@@ -410,6 +405,7 @@ class Atom():
                  element='', constraint=[False, False, False]):
 
         self.position = np.array(position)
+
         # Used in Verlet integration
         self.prev_pos = np.array(self.position)
         self.velocity = np.array(velocity)
@@ -425,8 +421,7 @@ class Atom():
         else:
             self.mass = mass or 1.0
 
-        ## Used for testing with a simple harmonic oscillator potential
-        ## in which the force is merely the displacement squared from initial position
+        # tests with SHO
         self.initial_pos = np.array(initial_pos)
 
         self.parameters = {'position': self.position,
@@ -457,6 +452,12 @@ class Atom():
 
 
 class ESPRESSO_config(object):
+    """
+    Class to hold configuration for QE runs
+
+    TODO: ADD ARGUMENTS TO DOC
+    """
+
     def get_correction_number(self):
         folders_in_correction_folder = list(os.walk(self.correction_folder))[0][1]
 
@@ -501,6 +502,7 @@ class ESPRESSO_config(object):
         self.ecut = ecut
 
 
+# TODO FOR SIMON: CLEAN THIS UP!
 # set to None for simon running tests locally, else use both lines
 # config2 = ESPRESSO_config(molecule=False)
 # config2.molecule = False
@@ -510,8 +512,7 @@ config2 = None
 def first_derivative_2nd(fm, fp, h):
     """
     Computes the second-order accurate finite difference form of the first derivative
-    which is (  fp/2 - fm/2)/(h)
-    as seen on Wikipedia: https://en.wikipedia.org/wiki/Finite_difference_coefficient
+    which is (  fp/2 - fm/2)/(h) -- ref: https://en.wikipedia.org/wiki/Finite_difference_coefficient
     """
     if h == 0:
         print("Warning... Trying to divide by zero. Derivative will diverge.")
@@ -521,10 +522,8 @@ def first_derivative_2nd(fm, fp, h):
 def first_derivative_4th(fmm, fm, fp, fpp, h):
     """
     Computes the fourth-order accurate finite difference form of the first derivative
-    which is (fmm/12  - 2 fm /3 + 2 fp /3 - fpp /12)/h
-    as seen on Wikipedia: https://en.wikipedia.org/wiki/Finite_difference_coefficient
+    which is (fmm/12  - 2 fm /3 + 2 fp /3 - fpp /12)/h -- ref: https://en.wikipedia.org/wiki/Finite_difference_coefficient
     """
-
     if h == 0:
         print("Warning... Trying to divide by zero. Derivative will diverge.")
 
@@ -532,6 +531,9 @@ def first_derivative_4th(fmm, fm, fp, fpp, h):
 
 
 def run_espresso(atoms, cell, qe_config=config2, ecut=40, molecule=True, stepcount=0, iscorrection=False):
+    """
+    Run QE w/ specified configuratioin
+    """
     pseudopots = {}
     elements = [atom.element for atom in atoms]
     for element in elements:
@@ -603,7 +605,7 @@ def run_espresso(atoms, cell, qe_config=config2, ecut=40, molecule=True, stepcou
 
 
 def SHO_config(atoms):
-    # No special configuration needed
+    # dummy function, no special config needed
     return [atom.position for atom in atoms]
 
 
@@ -654,6 +656,7 @@ def KRR_config(atoms, cell):
     return coords.T.flatten().reshape(1, -1)
 
 
+# TODO: CHECK WHICH ONE TO KEEP
 #
 # # Leaving it this way for now because it's simpler for testing aluminum plus no
 # #   risk of matrix inversion introducing numerical noise
@@ -687,10 +690,17 @@ def LJ_energy(atoms, rm=.5, eps=10., debug=False):
 
 
 def KRR_energy(krrconfig, model):
+    """
+    Compute energy w/ Kernel Ridge Regression
+    """
     return model.predict(krrconfig)
 
 
 def GP_config(atoms, cell):
+    """
+    Compute input config for Gaussian Process
+    :return: proper input config
+    """
     coords = np.empty(shape=(3, len(atoms)))
 
     for n in range(len(atoms)):
@@ -704,10 +714,17 @@ def GP_config(atoms, cell):
 
 
 def GP_energy(gpconfig, model):
+    """
+    Compute energy w/ Gaussian Process
+    """
     return model.predict(gpconfig, return_std=True)
 
 
 def get_aug_values(correction_folder, keyword='step', ML_model=None):
+    """
+    Update training set
+    TODO: ASK STEVEN WHAT IS HAPPENING HERE EXACTLY
+    """
     energies = []
     positions = []
     forces = []
