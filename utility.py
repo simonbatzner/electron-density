@@ -7,45 +7,43 @@
 Simon Batzner, Steven Torrisi, Jon Vandermause
 """
 
-# TODO: PROPERLY SET UP IMPORTS
-import os
-
-import numpy as np
 import numpy.random as rand
 import numpy.linalg as la
 from ase import Atoms
 
 from util.project_objects import *
 from util.project_pwscf import *
-from Solid_State import KRR_reproduce
-from Solid_State import KRR_Functions
 
 
 class MD_engine():
     def __init__(self, input_atoms=[], cell=np.eye(3), dx=.1, verbosity=1, model='SHO', store_trajectory=True,
                  espresso_config=None, thermo_config=None, ML_model=None, assert_boundaries=True, fd_accuracy=2,
                  threshold=0):
+
+        # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
         """
         Parameters
         ----------
-        input_atoms:        Atoms in the unit cell, list of objects of type Atom
-        cell:               3x3 matrix [[a11 a12 a13],..] which define the dimensions of the unit cell.
-        dx:                 Perturbation distance used to evaluate the forces by finite differences in potential energy.
-        verbosity:          integer from 0 to 5 which determines how much information will be printed about runs.
-        model:              energy model used.
-        store_trajectory:   Boolean which determines if positions will be saved after every time step.
-        espresso_config:    Espresso_config object which determines how on-the-fly quantum espresso runs will be
-                            parameteried.
-        thermo_config:      Thermo config object which determines the thermostate methodology that will be used
+
+        input_atoms:        list, atoms in the unit cell, list of objects of type Atom
+        cell:               numpy array, 3x3 matrix [[a11 a12 a13],..] which define the dimensions of the unit cell
+        dx:                 float, perturbation distance used to evaluate the forces by finite differences in potential energy
+        verbosity:          integer, ranges from 0 to 5 which determines how much information will be printed about runs.
+        model:              string, energy model used
+        store_trajectory:   boolean, if positions will be saved after every time step.
+        espresso_config:    Espresso_config object, determines how on-the-fly quantum espresso runs will be
+                            parameterized
+        thermo_config:      Thermo config object, determines the thermostate methodology that will be used
                             for molecular dynamics.
-        ML_model:           Object which parameterizes a ML model which returns energies when certain configurations are input.
-        assert_boundaries : Determines if boundary conditions are asserted at the end of each position update
-                            (which forces atoms to lie within the unit cell).
-        fd_accuracy:        Integer 2 or 4. Determines if the finite difference force calculation will be evaluated to
+        ML_model:           ML model object, parameterizes a ML model which returns energies when certain configurations are input
+        assert_boundaries : boolena, if boundary conditions are asserted at the end of each position update
+                            (which forces atoms to lie within the unit cell)
+        fd_accuracy:        integer: 2 or 4, determines if the finite difference force calculation will be evaluated to
                             second or fourth order in dx. Note that this increases the number of energy calculations
-                            and thus increases run time.
-        threshold:          Defines an uncertainty cutoff above which a DFT run will be called.
+                            and thus increases run time
+        threshold:          float, defines an uncertainty cutoff above which a DFT run will be called.
         """
+
         self.verbosity = verbosity
 
         self.atoms = input_atoms
@@ -230,24 +228,31 @@ class MD_engine():
 
     def run(self, tf, dt):
         """
-        Handles timestepping; at each step, calculates the force and then
-        advances via the take_timestep method
+        Calculates the force and then advanced one timestep
         """
 
-        # The very first timestep often doesn't have the 'previous position' to use,
-        # so the third-order Euler method starts us off using information about the position,
-        # velocity (if provided) and force:
-
+        # TODO: DISCUSS W/ STEVEN HOW TO HANDLE STEPS
+        n_step = 0
         if self.time == 0:
+
+            # Very first timestep often doesn't have the 'previous position' to use, instead use third-order Euler method
+            # using information about the position, velocity (if provided) and force
+
             self.update_atom_forces()
             self.take_timestep(dt, method='TO_Euler')
+
             # Assert boundary conditions (push all atoms to unit cell) if specified
             if self.assert_boundaries: self.assert_boundary_conditions()
 
             if self.verbosity >= 3:
                 self.print_positions()
 
+            n_step += 1
+
         while self.time < tf:
+            if self.verbosity == 5:
+                print("Current time: {}".format(self.time))
+
             self.update_atom_forces()
             self.take_timestep(dt)
             if self.assert_boundaries: self.assert_boundary_conditions()
@@ -258,9 +263,7 @@ class MD_engine():
             # check uncertainty and retrain model if it exceeds specified threshold
             if (self.model == 'GP' or self.model == 'KRR') and self.threshold > 0:
 
-                valid = self.gauge_uncertainty()
-
-                if valid:
+                if self.gauge_uncertainty():
                     if self.verbosity == 5:
                         print("Uncertainty valid")
                     continue
@@ -273,8 +276,10 @@ class MD_engine():
                     self.take_timestep(-dt)
                     self.time -= dt
                     run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
-                                 iscorrection=True)
+                                 iscorrection=True, stepcount=n_step)
                     self.retrain_ml_model()
+
+            n_step += 1
 
     def assert_boundary_conditions(self):
         """
@@ -298,6 +303,7 @@ class MD_engine():
 
         for atom in self.atoms:
 
+            # TODO: CONVERT INV TO SOLVE LS
             coords = np.dot(la.inv(self.cell), atom.position)
             if self.verbosity == 5:
                 print('Atom positions before BC check:', atom.position)
@@ -375,15 +381,12 @@ class MD_engine():
 
         # Gaussian Process
         if self.model == "GP":
-
             # update training set
             x_init = self.ML_model.original_train_set
             y_init = self.ML_model.original_train_ens
 
             x_add, y_add = get_aug_values(self.espresso_config.correction_folder)
 
-            print(np.asarray(x_add)[:, None].T.shape)
-            print(np.asarray(x_init).shape)
             x_upd = np.concatenate((x_init, np.asarray(x_add)[:, None].T), axis=0)
             y_upd = np.concatenate((y_init, np.asarray(y_add)[:, None]), axis=0)
 
@@ -396,7 +399,17 @@ class MD_engine():
 class Atom():
     """
     Class that holds basic information on atoms in the system
-    # TODO: ADD ARGUMENTS TO DOC
+
+    # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
+    Parameters
+    ----------
+    position:       list, atom positions
+    velocity:       list, atom velocities
+    force:          list, forces on atoms
+    initial_pos:    list, atom initial positions
+    mass:           float, atom mass
+    element:        str, chemical species
+    constraint:     list of booleans, apply constraint or not
     """
     mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855}
 
@@ -453,9 +466,22 @@ class Atom():
 
 class ESPRESSO_config(object):
     """
-    Class to hold configuration for QE runs
+    Class that holds configuration for QE run
 
-    TODO: ADD ARGUMENTS TO DOC
+    # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
+    # TODO: make k-point mesh a 3-dim array
+
+    Parameters
+    ----------
+    workdir:            str, working directory
+    run_pwscf:          str, path to pwscf command
+    pseudopotentials:   dictionary, holds pseudopotential object w/ path and functional type per chemical species
+    molecule:           boolean, molecular system or not
+    nk:                 integer, k-point mesh used for DFT
+    correction_folder:  str, ?
+    system_name:        str, name for materials system
+    correction_number   int, ?
+    ecut:               int, wavefunction cutoff
     """
 
     def get_correction_number(self):
@@ -475,8 +501,12 @@ class ESPRESSO_config(object):
 
         # Where to store QE calculations
         self.workdir = os.environ['PROJDIR'] + '/AIMD'
+        print("Working directory initialized: {}".format(self.workdir))
+
         # Runs the PWSCF
         self.run_pwscf = os.environ['PWSCF_COMMAND']
+        print("PWSCF_COMMAND: {}".format(self.run_pwscf))
+
         # Helpful dictionary of pseudopotential objects
         self.pseudopotentials = {"H": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='uspp', element='H',
                                                       functional='GGA', name='H.pbe-kjpaw.UPF'),
@@ -486,27 +516,25 @@ class ESPRESSO_config(object):
                                                        functional='PZ', name='Al.pz-vbc.UPF')}
         # Periodic boundary conditions and nk X nk X nk k-point mesh,
         # or no PBCs and Gamma k point only
+
+        # TODO: RENAME THIS TO SYSTEM_TYPE OR SOMETHING MORE GENERAL
         self.molecule = molecule
 
         # Dimensions of k point grid
         self.nk = nk
 
         # Will be used for correction folders later
-
+        # TODO: WHAT IS THE CORRECTION FOLDERS PURPOSE?
         self.system_name = system_name
+        print("System name: {}".format(self.system_name))
 
         self.correction_folder = correction_folder or self.workdir
+        print("Correction folder: {}".format(self.correction_folder))
 
         self.correction_number = self.get_correction_number()
+        print("Correction number: {}".format(self.correction_number))
 
         self.ecut = ecut
-
-
-# TODO FOR SIMON: CLEAN THIS UP!
-# set to None for simon running tests locally, else use both lines
-# config2 = ESPRESSO_config(molecule=False)
-# config2.molecule = False
-config2 = None
 
 
 def first_derivative_2nd(fm, fp, h):
@@ -530,15 +558,18 @@ def first_derivative_4th(fmm, fm, fp, fpp, h):
     return (fmm / 12. - 2 * fm / 3. + 2 * fp / 3. - fpp / 12.) / float(h)
 
 
-def run_espresso(atoms, cell, qe_config=config2, ecut=40, molecule=True, stepcount=0, iscorrection=False):
+def run_espresso(atoms, cell, qe_config=None, ecut=40, molecule=True, stepcount=0, iscorrection=False):
     """
     Run QE w/ specified configuratioin
     """
+
+    # TODO W/ STEVEN: WE'RE CONSTRUCTING THIS PSEUDOPOT DICTIONARY EVERY TIME FROM SCRATCH, WAY AROUND THAT?
     pseudopots = {}
     elements = [atom.element for atom in atoms]
     for element in elements:
         pseudopots[element] = qe_config.pseudopotentials[element]
 
+    # define system's ASE structure
     ase_struc = Atoms(symbols=[atom.element for atom in atoms],
                       positions=[atom.position for atom in atoms],
                       cell=cell,
@@ -546,6 +577,7 @@ def run_espresso(atoms, cell, qe_config=config2, ecut=40, molecule=True, stepcou
 
     struc = Struc(ase2struc(ase_struc))
 
+    # QE run config
     if qe_config.molecule:
         kpts = Kpoints(gridsize=[1, 1, 1], option='gamma', offset=False)
     else:
@@ -557,13 +589,18 @@ def run_espresso(atoms, cell, qe_config=config2, ecut=40, molecule=True, stepcou
     else:
         dirname = 'temprun'
     runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "AIMD", dirname))
+
+    print("Runpath: {}".format(runpath))
+    print("Current working dir: {}".format(os.getcwd()))
+
+    # write QE input file
     input_params = PWscf_inparam({
         'CONTROL': {
             'prefix': 'AIMD',
             'calculation': 'scf',
             'pseudo_dir': os.environ['ESPRESSO_PSEUDO'],
             'outdir': runpath.path,
-            #            'wfcdir': runpath.path,
+            # 'wfcdir': runpath.path,
             'disk_io': 'low',
             'tprnfor': True,
             'wf_collect': False
@@ -571,7 +608,7 @@ def run_espresso(atoms, cell, qe_config=config2, ecut=40, molecule=True, stepcou
         'SYSTEM': {
             'ecutwfc': ecut,
             'ecutrho': ecut * 8,
-            #           'nspin': 4 if 'rel' in potname else 1,
+            # 'nspin': 4 if 'rel' in potname else 1,
 
             'occupations': 'smearing',
             'smearing': 'mp',
@@ -588,13 +625,14 @@ def run_espresso(atoms, cell, qe_config=config2, ecut=40, molecule=True, stepcou
         'CELL': {},
     })
 
+    # run QE and parse output
     output_file = run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
                                params=input_params, kpoints=kpts,
                                ncpu=1)
     output = parse_qe_pwscf_output(outfile=output_file)
-
     print("Parsed QE output file... ")
 
+    # write results to file
     with open(runpath.path + 'en', 'w') as f:
         f.write(str(output['energy']))
     with open(runpath.path + 'pos', 'w')as f:
@@ -605,7 +643,9 @@ def run_espresso(atoms, cell, qe_config=config2, ecut=40, molecule=True, stepcou
 
 
 def SHO_config(atoms):
-    # dummy function, no special config needed
+    """
+    No special input config needed for SHO
+    """
     return [atom.position for atom in atoms]
 
 
@@ -647,30 +687,6 @@ def SHO_energy(atoms, kx=10.0, ky=1.0, kz=1.0):
     return E
 
 
-def KRR_config(atoms, cell):
-    coords = np.empty(shape=(3, len(atoms)))
-    # print("Here are the before positions:",[atom.position for atom in atoms])
-    for n in range(len(atoms)):
-        coords[:, n] = np.dot(la.inv(cell), atoms[n].position)
-    # print("And the after:",coords.T.flatten().reshape(1,-1))
-    return coords.T.flatten().reshape(1, -1)
-
-
-# TODO: CHECK WHICH ONE TO KEEP
-#
-# # Leaving it this way for now because it's simpler for testing aluminum plus no
-# #   risk of matrix inversion introducing numerical noise
-# def KRR_config(atoms, cell):
-#     alat = 4.10
-#     # print("Here are the before positions:",[atom.position for atom in atoms])
-#
-#     coords = np.empty(shape=(3, len(atoms)))
-#     for n in range(len(atoms)):
-#         coords[:, n] = atoms[n].position / alat
-#     # print("And the after:",coords.T.flatten().reshape(1,-1))
-#     return coords.T.flatten().reshape(1, -1)
-
-
 def LJ_energy(atoms, rm=.5, eps=10., debug=False):
     """
     Ordinary 12-6 form of the Lennard Jones potential
@@ -689,6 +705,35 @@ def LJ_energy(atoms, rm=.5, eps=10., debug=False):
     return E
 
 
+def KRR_config(atoms, cell):
+    """
+    Compute input config for Kernel Ridge Regression
+    :return: proper input config
+    """
+    coords = np.empty(shape=(3, len(atoms)))
+
+    for n in range(len(atoms)):
+        # TODO: CONVERT INVERT TO LINEAR SYSTEM
+        coords[:, n] = np.dot(la.inv(cell), atoms[n].position)
+
+    return coords.T.flatten().reshape(1, -1)
+
+
+# TODO: CHECK WHICH ONE TO KEEP
+#
+# # Leaving it this way for now because it's simpler for testing aluminum plus no
+# #   risk of matrix inversion introducing numerical noise
+# def KRR_config(atoms, cell):
+#     alat = 4.10
+#     # print("Here are the before positions:",[atom.position for atom in atoms])
+#
+#     coords = np.empty(shape=(3, len(atoms)))
+#     for n in range(len(atoms)):
+#         coords[:, n] = atoms[n].position / alat
+#     # print("And the after:",coords.T.flatten().reshape(1,-1))
+#     return coords.T.flatten().reshape(1, -1)
+
+
 def KRR_energy(krrconfig, model):
     """
     Compute energy w/ Kernel Ridge Regression
@@ -704,6 +749,7 @@ def GP_config(atoms, cell):
     coords = np.empty(shape=(3, len(atoms)))
 
     for n in range(len(atoms)):
+        # TODO: CONVERT INV TO SOLVE LINEAR SYSTEM
         coords[:, n] = np.dot(la.inv(cell), atoms[n].position)
 
     coords = coords.flatten()

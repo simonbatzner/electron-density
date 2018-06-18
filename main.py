@@ -38,10 +38,10 @@ def set_scf(arguments):
     nk = 8  # size of kpoint grid
     dim = 4  # size of supercell
 
-    # # debug config
-    # ecut = 5.0
-    # nk = 1
-    # dim = 4
+    # debug config
+    ecut = 5.0
+    nk = 1
+    dim = 1
 
     if arguments.system_type == "solid":
         config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name)
