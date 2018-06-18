@@ -241,9 +241,9 @@ class MD_engine():
 
         if self.time == 0:
 
-            if self.verbosity == 5:
-                print("\n======================================\nStep: {}".format(n_step))
-                print("Current time: {}\n".format(self.time))
+
+            print("\n======================================\nStep: {}".format(n_step))
+            print("Current time: {}\n".format(self.time))
 
             # Very first timestep often doesn't have the 'previous position' to use, instead use third-order Euler method
             # using information about the position, velocity (if provided) and force
@@ -278,9 +278,8 @@ class MD_engine():
 
         while self.time < tf:
 
-            if self.verbosity == 5:
-                print("\n======================================\nStep: {}".format(n_step))
-                print("Current time: {}\n".format(self.time))
+            print("\n======================================\nStep: {}".format(n_step))
+            print("Current time: {}\n".format(self.time))
 
 
             self.update_atom_forces()
@@ -361,6 +360,8 @@ class MD_engine():
         """
         Ceck if prediction's uncertainty is within an acceptable bound given by threshold.
         If not, run QE, add to training set and retrain ML model
+
+        :return False if uncertainty is higher than threshold, True otherwise
         """
 
         # Kernel Ridge Regression
@@ -380,7 +381,7 @@ class MD_engine():
             energy, sigma = GP_energy(config, self.ML_model)
 
             if self.threshold < sigma:
-                print("\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}\n".format(sigma[0]))
+                print("\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}\nRunning DFT calculation\n".format(sigma[0]))
                 return False
 
         return True
@@ -512,6 +513,7 @@ class ESPRESSO_config(object):
     system_name:        str, name for materials system
     correction_number   int, ?
     ecut:               int, wavefunction cutoff
+    qe_mode:               str, run QE in serial or parallel, default: parallel
     """
 
     def get_correction_number(self):
@@ -527,7 +529,7 @@ class ESPRESSO_config(object):
         return correction_number + 1
 
     def __init__(self, workdir=None, run_pwscf=None, pseudopotentials=None,
-                 molecule=False, nk=15, correction_folder=None, system_name="", correction_number=0, ecut=40, ):
+                 molecule=False, nk=15, correction_folder=None, system_name="", correction_number=0, ecut=40, qe_mode = 'parallel'):
 
         # Where to store QE calculations
         self.workdir = os.environ['PROJDIR'] + '/AIMD'
@@ -552,6 +554,9 @@ class ESPRESSO_config(object):
 
         # Dimensions of k point grid
         self.nk = nk
+
+        # Run QE parallel or serial
+        self.qe_mode = qe_mode
 
         # Will be used for correction folders later
         # TODO: WHAT IS THE CORRECTION FOLDERS PURPOSE?
@@ -656,13 +661,13 @@ def run_espresso(atoms, cell, qe_config=None, ecut=40, molecule=True, stepcount=
     # run QE and parse output
     output_file = run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
                                params=input_params, kpoints=kpts,
-                               ncpu=1)
+                               ncpu=1, qe_mode=qe_config.qe_mode)
     output = parse_qe_pwscf_output(outfile=output_file)
 
     # write results to file
-    with open(runpath.path + 'en', 'w') as f:
+    with open(runpath.path + '/en', 'w') as f:
         f.write(str(output['energy']))
-    with open(runpath.path + 'pos', 'w')as f:
+    with open(runpath.path + '/pos', 'w')as f:
         for pos in [atom.position for atom in atoms]:
             f.write(str(pos) + '\n')
 
@@ -811,6 +816,8 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
             fold = correction_folder + '/' + fold
 
             # print("\nFolder: {}\n".format(fold))
+            # @STEVEN: when i run the engine until tf, I get the following error when trying to open the file:
+            # '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/AIMD/step_200/en'
             with open(fold + '/en', 'r') as f:
                 energies.append(float(f.readlines()[0]))
 

@@ -57,10 +57,12 @@ def set_scf(arguments):
     nk = 1
     dim = 1
 
+    print("QE mode: {}".format(arguments.qe_mode))
+
     if arguments.system_type == "solid":
-        config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name)
+        config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name, qe_mode=arguments.qe_mode)
     elif arguments.system_type == "molecule":
-        config = ESPRESSO_config(molecule=True, ecut=ecut, nk=nk, system_name=arguments.system_name)
+        config = ESPRESSO_config(molecule=True, ecut=ecut, nk=nk, system_name=arguments.system_name, qe_mode=arguments.qe_mode)
     else:
         raise ValueError('Please provide a proper system type: molecule or solid')
         sys.exit(1)
@@ -268,6 +270,7 @@ def parse_args():
                         help='maximum of range for periodicity for expsinesquared kernel')
     parser.add_argument('--alat', type=float, default=4.10)
     parser.add_argument('--verbosity', type=int, default=5, help='1 to 5')
+    parser.add_argument('--qe_mode', type=str, default='parallel', help='run espresso in "parallel" or "serial"')
 
     args = parser.parse_args()
     return args
