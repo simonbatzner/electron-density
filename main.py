@@ -43,7 +43,13 @@ def set_scf(arguments):
     # nk = 1
     # dim = 4
 
-    config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name)
+    if arguments.system_type == "solid":
+        config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name)
+    elif arguments.system_type == "molecule":
+        config = ESPRESSO_config(molecule=True, ecut=ecut, nk=nk, system_name=arguments.system_name)
+    else:
+        raise ValueError('Please provide a proper system type: molecule or solid')
+        sys.exit(1)
 
     alat = arguments.alat
     nat = 2 * dim ** 3
@@ -89,7 +95,7 @@ def set_scf(arguments):
 
 def load_data(str_pref, sim_no, arguments):
     """"
-    Load DFT data, set up input/target and convert to Atom representation
+    Load DFT data, set up input/target data and convert to Atom representation
     """
     print("\nLoading data ...")
     pos = []
@@ -180,6 +186,8 @@ def main(arguments):
     # params
     # str_pref = os.environ['PROJDIR']+'/Aluminium_Dataset/Store/'
     str_pref = arguments.data_dir
+
+    # UPDATE THIS
     sim_no = 201  # total number of data points
 
     # define scf params
@@ -209,6 +217,7 @@ def main(arguments):
     print("\nRunning MD engine...")
     GP_engine.run(1, .1)
 
+
 def parse_args():
     """
     Parse command line arguments
@@ -218,10 +227,10 @@ def parse_args():
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
-
     parser.add_argument('--partition', type=str, default='kozinsky')
     parser.add_argument('--data_dir', type=str, default='.', help='directory where training data are located')
     parser.add_argument('--system_name', type=str, default='Al')
+    parser.add_argument('--system_type', type=str, default='solid', help='"solid" or "molecule"')
     parser.add_argument('--kernel', type=str, default='rbf',
                         help='GP kernel: "rbf", "matern", "c_rbf" or "expsinesquared"')
     parser.add_argument('--length_scale', type=float, default=10, help='length-scale of Gaussian Process')
@@ -243,8 +252,8 @@ def parse_args():
                         help='miminum of range for periodicity for expsinesquared kernel')
     parser.add_argument('--periodicity_max', type=float, default=1e2,
                         help='maximum of range for periodicity for expsinesquared kernel')
-    parser.add_argument('--verbosity', type=int, default=5, help='1 to 5')
     parser.add_argument('--alat', type=float, default=4.10)
+    parser.add_argument('--verbosity', type=int, default=5, help='1 to 5')
 
     args = parser.parse_args()
     return args

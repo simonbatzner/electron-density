@@ -25,29 +25,30 @@ class MD_engine():
                  espresso_config=None, thermo_config=None, ML_model=None, assert_boundaries=True, fd_accuracy=2,
                  threshold=0):
         """
-        Initialize the features of the system, which include:
-        input_atoms: Atoms in the unit cell, list of objects of type Atom (defined later on in this notebook)
-        cell:  3x3 matrix [[a11 a12 a13],..] which define the dimensions of the unit cell.
-        dx:    Perturbation distance used to evaluate the forces by finite differences in potential energy.
-        verbosity: integer from 0 to 5 which determines how much information will be printed about runs.
-                    Ranging from 0 as silent to 5 is TMI and is mostly for debugging.
-        model: The energy model used.
-        store_trajectory: Boolean which determines if positions will be saved after every time step.
-        epsresso_config: Espresso_config object which determines how on-the-fly quantum espresso runs will be
-                        parameteried.
-        thermo_config:   Thermo config object which determines the thermostate methodology that will be used
-                        for molecular dynamics.
-        ML_model: Object which parameterizes a ML model which returns energies when certain configurations are input.
+        Parameters
+        ----------
+        input_atoms:        Atoms in the unit cell, list of objects of type Atom
+        cell:               3x3 matrix [[a11 a12 a13],..] which define the dimensions of the unit cell.
+        dx:                 Perturbation distance used to evaluate the forces by finite differences in potential energy.
+        verbosity:          integer from 0 to 5 which determines how much information will be printed about runs.
+        model:              energy model used.
+        store_trajectory:   Boolean which determines if positions will be saved after every time step.
+        espresso_config:    Espresso_config object which determines how on-the-fly quantum espresso runs will be
+                            parameteried.
+        thermo_config:      Thermo config object which determines the thermostate methodology that will be used
+                            for molecular dynamics.
+        ML_model:           Object which parameterizes a ML model which returns energies when certain configurations are input.
         assert_boundaries : Determines if boundary conditions are asserted at the end of each position update
                             (which forces atoms to lie within the unit cell).
-        fd_accuracy: Integer 2 or 4. Determines if the finite difference force calculation will be evaluated to
-                        second or fourth order in dx. Note that this increases the number of energy calculations
-                        and thus increases run time.
-        threshold: Defines an uncertainty cutoff above which a DFT run will be called.
+        fd_accuracy:        Integer 2 or 4. Determines if the finite difference force calculation will be evaluated to
+                            second or fourth order in dx. Note that this increases the number of energy calculations
+                            and thus increases run time.
+        threshold:          Defines an uncertainty cutoff above which a DFT run will be called.
         """
         self.verbosity = verbosity
 
         self.atoms = input_atoms  # Instantiate internal list of atoms, populate via helper function
+
         for atom in input_atoms:
             if self.verbosity == 5:
                 print('Loading in', atom)
@@ -60,13 +61,12 @@ class MD_engine():
 
         self.store_trajectory = store_trajectory
 
-        # Construct trajectories object
         if store_trajectory:
             self.trajs = []
             for n in range(len(self.atoms)):
                 self.trajs.append([])
 
-        # Set configurations
+        # config
         self.espresso_config = espresso_config or None
         self.thermo_config = thermo_config or None
         self.ML_model = ML_model or None
