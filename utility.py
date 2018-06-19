@@ -236,7 +236,6 @@ class MD_engine():
         Calculates the force and then advanced one timestep
         """
 
-        # TODO: DISCUSS W/ STEVEN HOW TO HANDLE STEPS
         n_step = 0
 
         if self.time == 0:
@@ -303,7 +302,6 @@ class MD_engine():
                         print("Uncertainty invalid, computing DFT\n")
 
                     self.take_timestep(-dt)
-                    # TODO - I REMOVED A self.time -= dt here!
                     run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
                                  iscorrection=True, stepcount=n_step)
                     self.retrain_ml_model()
@@ -412,6 +410,7 @@ class MD_engine():
 
         # Gaussian Process
         if self.model == "GP":
+
             # update training set
             x_init = self.ML_model.original_train_set
             y_init = self.ML_model.original_train_ens
@@ -500,7 +499,7 @@ class ESPRESSO_config(object):
     Class that holds configuration for QE run
 
     # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
-    # TODO: make k-point mesh a 3-dim array
+    # TODO: make k-point mesh a 3-dim array, include check for int vs. list
 
     Parameters
     ----------
@@ -559,7 +558,6 @@ class ESPRESSO_config(object):
         self.qe_mode = qe_mode
 
         # Will be used for correction folders later
-        # TODO: WHAT IS THE CORRECTION FOLDERS PURPOSE?
         self.system_name = system_name
         print("\nSystem name: {}".format(self.system_name.title()))
 
@@ -751,21 +749,6 @@ def KRR_config(atoms, cell):
     return coords.T.flatten().reshape(1, -1)
 
 
-# TODO: CHECK WHICH ONE TO KEEP
-#
-# # Leaving it this way for now because it's simpler for testing aluminum plus no
-# #   risk of matrix inversion introducing numerical noise
-# def KRR_config(atoms, cell):
-#     alat = 4.10
-#     # print("Here are the before positions:",[atom.position for atom in atoms])
-#
-#     coords = np.empty(shape=(3, len(atoms)))
-#     for n in range(len(atoms)):
-#         coords[:, n] = atoms[n].position / alat
-#     # print("And the after:",coords.T.flatten().reshape(1,-1))
-#     return coords.T.flatten().reshape(1, -1)
-
-
 def KRR_energy(krrconfig, model):
     """
     Compute energy w/ Kernel Ridge Regression
@@ -799,7 +782,6 @@ def GP_energy(gpconfig, model):
 def get_aug_values(correction_folder, keyword='step', ML_model=None):
     """
     Update training set
-    TODO: ASK STEVEN WHAT IS HAPPENING HERE EXACTLY
     """
     energies = []
     positions = []
@@ -816,8 +798,6 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
             fold = correction_folder + '/' + fold
 
             # print("\nFolder: {}\n".format(fold))
-            # @STEVEN: when i run the engine until tf, I get the following error when trying to open the file:
-            # '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/AIMD/step_200/en'
             with open(fold + '/en', 'r') as f:
                 energies.append(float(f.readlines()[0]))
 

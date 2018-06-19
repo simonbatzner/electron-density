@@ -12,18 +12,13 @@
 Simon Batzner, Steven Torrisi, Jon Vandermause
 """
 
-
 ########################################################################################################################
 # GENERAL TO-DOs:
 #
 # 1. as soon as we have force rep, we need to transition models from E to F; this especially concernes uncertainty
-# handling (currently done redudantly for E) and the finite-difference approx currently used to get F
+# handling (currently done redundantly for E) and the finite-difference approx currently used to get F
 #
-# 2. set up project_pwscf.py for parallel and serial runs
-#
-# 3. integrate partition params w/ run config, currenlty all is done via environment variables
-#
-# 4. migrate regression modules to own module
+# 2. integrate partition params w/ run config, just set environment variables depending on partition chosen
 ########################################################################################################################
 
 from __future__ import absolute_import
@@ -60,9 +55,11 @@ def set_scf(arguments):
     print("QE mode: {}".format(arguments.qe_mode))
 
     if arguments.system_type == "solid":
-        config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name, qe_mode=arguments.qe_mode)
+        config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name,
+                                 qe_mode=arguments.qe_mode)
     elif arguments.system_type == "molecule":
-        config = ESPRESSO_config(molecule=True, ecut=ecut, nk=nk, system_name=arguments.system_name, qe_mode=arguments.qe_mode)
+        config = ESPRESSO_config(molecule=True, ecut=ecut, nk=nk, system_name=arguments.system_name,
+                                 qe_mode=arguments.qe_mode)
     else:
         raise ValueError('Please provide a proper system type: molecule or solid')
         sys.exit(1)
@@ -133,21 +130,13 @@ def load_data(str_pref, sim_no, arguments):
     pos = np.reshape(pos, (sim_no, pos[0].shape[0]))
     ens = np.reshape(ens, (sim_no, 1))
 
-    # ASK STEVEN WHY NPOS = 15?
-    # Npos = 15
-    # Atom1 = Atom(position=pos[Npos][:3] * alat, element='Al')
-    # Atom2 = Atom(position=pos[Npos][3:6] * alat, element='Al')
-    # Atom3 = Atom(position=pos[Npos][6:9] * alat, element='Al')
-    # Atom4 = Atom(position=pos[Npos][9:] * alat, element='Al')
-    # input_atoms= [Atom1, Atom2, Atom3, Atom4]
-
     # starting config for MD engine
     n_atoms = pos.shape[1] // 3
     input_atoms = []
 
     for n in range(n_atoms):
         input_atoms.append(
-            Atom(position=pos[0][(n * 3):(n * 3 + 3)] * alat, element=str(arguments.system_name.title().strip('"\''))))
+            Atom(position=pos[10][(n * 3):(n * 3 + 3)] * alat, element=str(arguments.system_name.title().strip('"\''))))
 
     return pos, ens, input_atoms
 
