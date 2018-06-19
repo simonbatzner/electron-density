@@ -2,6 +2,7 @@ from objects import *
 import numpy
 from util.util import *
 
+
 class PWscf_inparam(Param):
     """
     Data class containing parameters for a Quantum Espresso PWSCF calculation
@@ -51,13 +52,11 @@ def write_pwscf_input(runpath, params, struc, kpoints, pseudopots, constraint=No
     if kpoints.content['option'] == 'automatic':
         inptxt += 'K_POINTS {automatic}\n'
 
-
     if kpoints.content['option'] == 'gamma':
         inptxt += "K_POINTS {gamma}\n"
 
     else:
         inptxt += ' {:d} {:d} {:d}'.format(*kpoints.content['gridsize'])
-
 
         if kpoints.content['offset']:
             inptxt += '  1 1 1\n'
@@ -197,8 +196,6 @@ def parse_qe_pwscf_md_output(outfile):
     # Carve up into chunks
     for n in range(len(split_indexes)):
         step_chunks.append(lines[split_indexes[n]:split_indexes[n + 1] if n != len(split_indexes) - 1 else len(lines)])
-
-
 
     # Iterate through chunks
     for current_chunk in step_chunks:
