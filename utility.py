@@ -98,9 +98,9 @@ class MD_engine():
             config = GP_config(self.atoms, self.cell)
             energy, sigma = GP_energy(config, self.ML_model)
 
-            # Check sigma bound
-            if la.norm(sigma) > .01:
-                print("Warning: Uncertainty cutoff reached: sigma = {}".format(sigma))
+            # # Check sigma bound
+            # if la.norm(sigma) > .01:
+            #     print("Warning: Uncertainty cutoff reached: sigma = {}".format(sigma))
 
             return energy
 
@@ -125,9 +125,11 @@ class MD_engine():
         """
 
         if self.model == 'AIMD':
+            print("AIMD model")
             results = run_espresso(self.atoms, self.cell, qe_config=self.espresso_config)
 
-            if self.verbosity == 4: print("E0:", results['energy'])
+            if self.verbosity == 4:
+                print("Energy: {}".format(results['energy']))
 
             force_list = results['forces']
             for n in range(len(force_list)):
@@ -137,7 +139,9 @@ class MD_engine():
 
         E0 = self.get_config_energy(self.atoms)
 
-        if self.verbosity >= 4: print('E0:', E0)
+        if self.verbosity >= 4:
+            print('\nEnergy: {}\n'.format(E0[0][0]))
+
         atoms = self.atoms
 
         # Finite-Difference Approx., 2nd/ 4th order as specified
@@ -158,7 +162,7 @@ class MD_engine():
 
                     atom.force[coord] = -first_derivative_2nd(Eminus, Eplus, self.dx)
                     if self.verbosity == 5:
-                        print("Just assigned force on atom's coordinate", coord, " to be ",
+                        print("Assigned force on atom's coordinate", coord, " to be ",
                               -first_derivative_2nd(Eminus, Eplus, self.dx))
 
         # Fourth-order finite-difference accuracy
@@ -218,12 +222,13 @@ class MD_engine():
                                                                                                  coord] * dt ** 2 / atom.mass
                     atom.velocity[coord] += atom.force[coord] * dt / atom.mass
                     atom.prev_pos[coord] = np.copy(temp_num)
-                    if self.verbosity == 5: print("Just propagated a distance of ",
+                    if self.verbosity == 5: print("Propagated a distance of ",
                                                   atom.position[coord] - atom.prev_pos[coord])
 
         if self.store_trajectory:
             for n in range(len(self.atoms)):
                 self.trajs[n].append(np.copy(self.atoms[n].position))
+
         self.time += dt
 
     def run(self, tf, dt):
@@ -251,6 +256,23 @@ class MD_engine():
 
             if self.verbosity >= 3:
                 self.print_positions()
+
+            # check uncertainty and retrain model if it exceeds specified threshold
+            if (self.model == 'GP' or self.model == 'KRR') and self.threshold > 0:
+
+                if self.gauge_uncertainty():
+                    if self.verbosity == 5:
+                        print("Uncertainty valid")
+
+                # move to previous MD step, compute DFT, update training set, retrain ML model
+                else:
+                    if self.verbosity == 5:
+                        print("Uncertainty invalid, computing DFT\n")
+
+                    self.take_timestep(-dt)
+                    run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
+                                 iscorrection=True, stepcount=n_step)
+                    self.retrain_ml_model()
 
             n_step += 1
 
@@ -282,7 +304,7 @@ class MD_engine():
                         print("Uncertainty invalid, computing DFT\n")
 
                     self.take_timestep(-dt)
-                    self.time -= dt
+                    # TODO - I REMOVED A self.time -= dt here!
                     run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
                                  iscorrection=True, stepcount=n_step)
                     self.retrain_ml_model()
@@ -325,7 +347,7 @@ class MD_engine():
 
     def print_positions(self, forces=True):
 
-        print("T=", self.time)
+        # print("T = ", self.time)
         for n in range(len(self.atoms)):
 
             pos = self.atoms[n].position
@@ -358,7 +380,7 @@ class MD_engine():
             energy, sigma = GP_energy(config, self.ML_model)
 
             if self.threshold < sigma:
-                print("\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}".format(sigma))
+                print("\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}\n".format(sigma[0]))
                 return False
 
         return True
@@ -598,8 +620,6 @@ def run_espresso(atoms, cell, qe_config=None, ecut=40, molecule=True, stepcount=
         dirname = 'temprun'
     runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "AIMD", dirname))
 
-    print("Runpath: {}".format(runpath))
-    print("Current working dir: {}".format(os.getcwd()))
 
     # write QE input file
     input_params = PWscf_inparam({
@@ -638,7 +658,6 @@ def run_espresso(atoms, cell, qe_config=None, ecut=40, molecule=True, stepcount=
                                params=input_params, kpoints=kpts,
                                ncpu=1)
     output = parse_qe_pwscf_output(outfile=output_file)
-    print("Parsed QE output file... ")
 
     # write results to file
     with open(runpath.path + 'en', 'w') as f:
@@ -790,7 +809,8 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
                 else:
                     continue
             fold = correction_folder + '/' + fold
-            print(fold)
+
+            # print("\nFolder: {}\n".format(fold))
             with open(fold + '/en', 'r') as f:
                 energies.append(float(f.readlines()[0]))
 
@@ -798,11 +818,10 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
                 read_pos = f.readlines()
                 for n in range(len(read_pos)):
                     curr_pos = read_pos[n].strip().strip('[').strip('\n').strip(']')
-                    print(curr_pos)
+                    # print(curr_pos)
                     curr_pos = [float(x) for x in curr_pos.split()]
                     for x in curr_pos:
                         positions.append(x)
 
-            print("Found positions", positions, "and energies", energies)
-
+            # print("\nFound positions: {}\nFound energies:  {}\n".format(positions, energies))
             return positions, energies
