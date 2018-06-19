@@ -4,11 +4,15 @@
 
 """" Production code -- Adaptive Machine-Learning Molecular Dynamics using Gaussian Processes
 
+    Example run config:
+
+    --partition simon_local --verbosity 1 --data_dir /Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/Aluminium_Dataset/Store/ --system_name='al' --np 1
+
     Parameters
     ----------
     partition           str, default: 'kozinsky'    -- partition to run on
     data_dir            str, default: '.'           -- directory where training data are located
-    system_name         str, default='Al'           -- name of materials systek
+    system_name         str, default='Al'           -- name of materials system
     system_type         str, default='solid'        -- "solid" or "molecule"'
     kernel              str, default='rbf'          -- kernel used in gaussian process: "rbf", "matern", "c_rbf" or "expsinesquared"
     length_scale        float, default=10           -- length-scale of Gaussian Process
@@ -21,12 +25,12 @@
     periodicity         float, default=1.           -- periodicity for expsinesquared kernel
     periodicity_min     float, default=1e-2         -- miminum of range for periodicity for expsinesquared kernel
     periodicity_max     float, default=1e2          -- maximum of range for periodicity for expsinesquared kernel')
-    alat                type=float, default=4.10    -- lattice parameter
-    np                  int, default=1              -- number of cores, 1 sets it so serial mode
-    nk                  int, default=0              -- number of k-points to work in parallel
-    nt                  int, default=0              #TODO: add this
-    nd                  int, default=0              -- number of threats which handle diagonlization
-    verbosity           int, default=5              -- verbosity of help from silent (1) to debuggin config (5)
+    alat                float, default=4.10         -- lattice parameter
+    np                  int, default=1              -- number of copies for MPI, 1 sets it to serial mode
+    nk                  int, default=0              -- number of pools
+    nt                  int, default=0              -- number of FFT task groups
+    nd                  int, default=0              -- number of linear algebra groups
+    verbosity           int, default=5              -- verbosity of help from silent (1) to debug config (5)
 
 
     # References:
@@ -92,28 +96,26 @@ def set_scf(arguments):
     partition = arguments.partition
 
     if partition == 'kozinsky':
-        pseudo_dir = '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
-        outdir = '/n/home03/jonpvandermause/Cluster/Si_Supercell_SCF'
-        pw_loc = '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
+
+        os.environ['PWSCF_COMMAND'] = '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
+        os.environ["ESPRESSO_PSEUDO"] = '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
         email = 'jonathan_vandermause@g.harvard.edu'
 
+        # for future use
+        # outdir = '/n/home03/jonpvandermause/Cluster/Si_Supercell_SCF'
+
     elif partition == 'kaxiras':
-        pseudo_dir = '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0'
-        outdir = ''
-        pw_loc = ''
+        os.environ['PWSCF_COMMAND'] = '/Users/simonbatzner1/QE/qe-6.0/bin/pw.x'
+        os.environ["ESPRESSO_PSEUDO"] = '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0'
         email = 'torrisi@g.harvard.edu'
 
     elif partition == 'mit':
-        pseudo_dir = ''
-        outdir = ''
-        pw_loc = ''
-        email = 'sbatzner@mit.edu'
+        os.environ['PWSCF_COMMAND'] = ''
+        os.environ["ESPRESSO_PSEUDO"] = ''
 
     elif partition == 'simon_local':
-        pseudo_dir = '/Users/simonbatzner1/QE/qe-6.0/pseudo'
-        outdir = sys.path.append(os.environ['ML_HOME'] + '/runs')
-        pw_loc = '/Users/simonbatzner1/QE/qe-6.0/bin/pw.x'
-        email = 'sbatzner@mit.edu'
+        os.environ['PWSCF_COMMAND'] = '/Users/simonbatzner1/QE/qe-6.0/bin/pw.x'
+        os.environ["ESPRESSO_PSEUDO"] = '/Users/simonbatzner1/QE/qe-6.0/pseudo'
 
     else:
         raise ValueError('Please provide a proper partition')
@@ -285,7 +287,7 @@ def parse_args():
 
 
 if __name__ == '__main__':
-    global pref, pseudo_dir, outdir, alat, ecut, nk, dim, nat, pw_loc, in_name, out_name, sh_name, partition, memory, email, config, verbosity
+    global pref, alat, ecut, nk, dim, nat, in_name, out_name, partition, config, verbosity
 
     arguments = parse_args()
     verbosity = arguments.verbosity

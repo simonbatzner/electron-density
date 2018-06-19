@@ -20,7 +20,6 @@ class MD_engine():
                  qe_config=None, thermo_config=None, ML_model=None, assert_boundaries=True, fd_accuracy=2,
                  uncertainty_threshold=0, energy_or_force_driven='energy'):
 
-        # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
         """
         Parameters
         ----------
@@ -265,7 +264,7 @@ class MD_engine():
             # check uncertainty and retrain model if it exceeds specified threshold
             if (self.model == 'GP' or self.model == 'KRR') and self.uncertainty_threshold > 0:
 
-                if self.gauge_model_uncertainty():
+                if self.check_sigma():
                     if self.verbosity == 5:
                         print("Uncertainty valid")
 
@@ -292,7 +291,7 @@ class MD_engine():
             # check uncertainty and retrain model if it exceeds specified threshold
             if (self.model == 'GP' or self.model == 'KRR') and self.uncertainty_threshold > 0:
 
-                if self.gauge_model_uncertainty():
+                if self.check_sigma():
                     if self.verbosity == 5:
                         print("Uncertainty valid")
                     continue
@@ -354,9 +353,9 @@ class MD_engine():
             else:
                 print('Atom %d:' % n, np.round(pos, decimals=4))
 
-    def gauge_model_uncertainty(self):
+    def check_sigma(self):
         """
-        Ceck if prediction's uncertainty is within an acceptable bound given by threshold.
+        Check if prediction's uncertainty is within an acceptable bound given by threshold.
         If not, run QE, add to training set and retrain ML model
 
         :return False if uncertainty is higher than threshold, True otherwise
@@ -435,7 +434,6 @@ class Atom():
     """
     Class that holds basic information on atoms in the system
 
-    # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
     Parameters
     ----------
     position:       list, atom positions
