@@ -87,18 +87,42 @@ def write_pwscf_input(runpath, params, struc, kpoints, pseudopots, constraint=No
     return infile
 
 
-def run_qe_pwscf(struc, runpath, pseudopots, params, kpoints, constraint=None, ncpu=1, qe_mode='parallel'):
+##  def run_qe_pwscf(struc, runpath, pseudopots, params, kpoints, constraint=None, ncpu=1, qe_mode='parallel'):
+#     pwscf_code = ExternalCode({'path': os.environ['PWSCF_COMMAND']})
+#     prepare_dir(runpath.path)
+#     infile = write_pwscf_input(params=params, struc=struc, kpoints=kpoints, runpath=runpath,
+#                                pseudopots=pseudopots, constraint=constraint)
+#
+#     outfile = File({'path': os.path.join(runpath.path, 'pwscf.out')})
+#
+#     if qe_mode == 'serial':
+#         pwscf_command = "{} < {} > {}".format(pwscf_code.path, infile.path, outfile.path)
+#     else:
+#         pwscf_command = "mpirun -np {} {} < {} > {}".format(ncpu, pwscf_code.path, infile.path, outfile.path)
+#
+#     run_command(pwscf_command)
+#     return outfile
+
+def run_qe_pwscf(struc, runpath, pseudopots, params, kpoints, constraint=None, ncpu=2, parallelization={}):
     pwscf_code = ExternalCode({'path': os.environ['PWSCF_COMMAND']})
     prepare_dir(runpath.path)
     infile = write_pwscf_input(params=params, struc=struc, kpoints=kpoints, runpath=runpath,
                                pseudopots=pseudopots, constraint=constraint)
-
     outfile = File({'path': os.path.join(runpath.path, 'pwscf.out')})
 
-    if qe_mode == 'serial':
-        pwscf_command = "{} < {} > {}".format(pwscf_code.path, infile.path, outfile.path)
+    parallelization_str = "mpirun "
+    if parallelization != {}:
+        for key, value in parallelization.items():
+            if value != 0:
+                parallelization_str += '-%s %d ' % (key, value)
     else:
-        pwscf_command = "mpirun -np {} {} < {} > {}".format(ncpu, pwscf_code.path, infile.path, outfile.path)
+        parallelization_str = "-np %d" % (ncpu)
+
+    # serial
+    if ncpu == 1:
+        parallelization_str = ""
+
+    pwscf_command = "{} {} < {} > {}".format(parallelization_str, pwscf_code.path, infile.path, outfile.path)
 
     run_command(pwscf_command)
     return outfile

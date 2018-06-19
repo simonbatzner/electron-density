@@ -18,30 +18,32 @@ from util.project_pwscf import *
 class MD_engine():
     def __init__(self, input_atoms=[], cell=np.eye(3), dx=.1, verbosity=1, model='SHO', store_trajectory=True,
                  espresso_config=None, thermo_config=None, ML_model=None, assert_boundaries=True, fd_accuracy=2,
-                 threshold=0):
+                 uncertainty_threshold=0, energy_or_force_driven='energy'):
 
         # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
         """
         Parameters
         ----------
 
-        input_atoms:        list, atoms in the unit cell, list of objects of type Atom
-        cell:               numpy array, 3x3 matrix [[a11 a12 a13],..] which define the dimensions of the unit cell
-        dx:                 float, perturbation distance used to evaluate the forces by finite differences in potential energy
-        verbosity:          integer, ranges from 0 to 5 which determines how much information will be printed about runs.
-        model:              string, energy model used
-        store_trajectory:   boolean, if positions will be saved after every time step.
-        espresso_config:    Espresso_config object, determines how on-the-fly quantum espresso runs will be
-                            parameterized
-        thermo_config:      Thermo config object, determines the thermostate methodology that will be used
-                            for molecular dynamics.
-        ML_model:           ML model object, parameterizes a ML model which returns energies when certain configurations are input
-        assert_boundaries : boolena, if boundary conditions are asserted at the end of each position update
-                            (which forces atoms to lie within the unit cell)
-        fd_accuracy:        integer: 2 or 4, determines if the finite difference force calculation will be evaluated to
-                            second or fourth order in dx. Note that this increases the number of energy calculations
-                            and thus increases run time
-        threshold:          float, defines an uncertainty cutoff above which a DFT run will be called.
+        input_atoms:            list, atoms in the unit cell, list of objects of type Atom
+        cell:                   numpy array, 3x3 matrix [[a11 a12 a13],..] which define the dimensions of the unit cell
+        dx:                     float, perturbation distance used to evaluate the forces by finite differences in potential energy
+        verbosity:              integer, ranges from 0 to 5 which determines how much information will be printed about runs.
+        model:                  string, energy model used
+        store_trajectory:       boolean, if positions will be saved after every time step.
+        espresso_config:        Espresso_config object, determines how on-the-fly quantum espresso runs will be
+                                parameterized
+        thermo_config:          Thermo config object, determines the thermostate methodology that will be used
+                                for molecular dynamics.
+        ML_model:               ML model object, parameterizes a ML model which returns energies when certain configurations are input
+        assert_boundaries :     boolean, if boundary conditions are asserted at the end of each position update
+                                (which forces atoms to lie within the unit cell)
+        fd_accuracy:            integer: 2 or 4, determines if the finite difference force calculation will be evaluated to
+                                second or fourth order in dx. Note that this increases the number of energy calculations
+                                and thus increases run time
+        uncertainYthreshold     float, defines an uncertainty cutoff above which a DFT run will be called
+        energy_or_force_driven: str, maps to 'driver': dictates if the finite difference energy model drives the simulation
+                                or if the force comes directly from the model (such as with AIMD.)
         """
 
         self.verbosity = verbosity
@@ -74,20 +76,15 @@ class MD_engine():
 
         self.fd_accuracy = fd_accuracy
 
-        self.threshold = threshold
+        self.uncertainty_threshold = None or uncertainty_threshold
+        self.driver = energy_or_force_driven
 
-    def add_atom(self, atom):
-        """
-        Helper function which adds atoms to the simulation
-        """
-        if self.verbosity == 4:
-            print("Adding atom", atom)
-        self.atoms.append(atom)
-
-    def get_config_energy(self, atoms):
+    def get_config_energy(self, atoms=None):
         """
         Transforms atomic positions to configuration, evaluates with specified model
         """
+
+        atoms = atoms or self.atoms
 
         # Simple Harmonic Oscillator
         if self.model == 'SHO':
@@ -106,15 +103,17 @@ class MD_engine():
 
         # Kernel Ridge Regression
         if self.model == "KRR":
-            # Convert to KRR input config
-            config = KRR_config(self.atoms, self.cell)
+            # Helper function which converts atom positions into a configuration
+            #  appropriate for the KRR model. Could then be modified
+            #  later depending on alternate representations.
+            config = KRR_configuration(self.atoms, self.cell)
             return KRR_energy(config, self.ML_model)
 
         # Lennard Jones
         if self.model == 'LJ':
             return LJ_energy(atoms)
 
-    def update_atom_forces(self):
+    def update_atom_forces(self, atoms=None, cell=None, model=None, qe_config=None, fd_accuracy=None):
         """
         Perturbs the atoms by a small amount dx in each direction
         and returns the gradient (and thus the force)
@@ -124,9 +123,15 @@ class MD_engine():
         stores the forces output from ESPRESSO as the atomic forces.
         """
 
+        atoms = atoms or self.atoms
+        cell = cell or self.cell
+        model = model or self.model
+        qe_config = qe_config or self.qe_config
+        fd_accuracy = fd_accuracy or self.fd_accuracy
+
         if self.model == 'AIMD':
             print("AIMD model")
-            results = run_espresso(self.atoms, self.cell, qe_config=self.espresso_config)
+            results = qe_config.run_espresso(self.atoms, self.cell, qe_config=self.espresso_config)
 
             if self.verbosity == 4:
                 print("Energy: {}".format(results['energy']))
@@ -191,12 +196,20 @@ class MD_engine():
 
         atom.apply_constraint()
 
-    def take_timestep(self, dt, method='Verlet'):
+    def take_timestep(self, atoms=None, dt=None, method=None):
         """
         Propagate the atoms forward by timestep dt according to it's current force and previous position.
         Note that the first time step does not have the benefit of a previous position, so, we use
         a standard third-order Euler timestep incorporating information about the velocity and the force.
         """
+
+        self.update_atom_forces()
+
+        atoms = atoms or self.atoms
+        dt = dt or self.dt
+        method = method or "Verlet"
+        self.time += dt
+
         temp_num = 0.
 
         # Third-order euler method, ref: https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
@@ -229,9 +242,10 @@ class MD_engine():
             for n in range(len(self.atoms)):
                 self.trajs[n].append(np.copy(self.atoms[n].position))
 
-        self.time += dt
+        if self.assert_boundaries: self.assert_boundary_conditions()
+        if self.verbosity > 3: self.print_positions()
 
-    def run(self, tf, dt):
+    def run(self, tf, dt, ti=0):
         """
         Calculates the force and then advanced one timestep
         """
@@ -240,53 +254,26 @@ class MD_engine():
 
         if self.time == 0:
 
-
-            print("\n======================================\nStep: {}".format(n_step))
-            print("Current time: {}\n".format(self.time))
+            if self.verbosity > 1:
+                print("\n======================================\nStep: {}".format(n_step))
+                print("Current time: {}\n".format(self.time))
 
             # Very first timestep often doesn't have the 'previous position' to use, instead use third-order Euler method
             # using information about the position, velocity (if provided) and force
 
-            self.update_atom_forces()
             self.take_timestep(dt, method='TO_Euler')
 
-            # Assert boundary conditions (push all atoms to unit cell) if specified
-            if self.assert_boundaries: self.assert_boundary_conditions()
-
-            if self.verbosity >= 3:
-                self.print_positions()
-
-            # check uncertainty and retrain model if it exceeds specified threshold
-            if (self.model == 'GP' or self.model == 'KRR') and self.threshold > 0:
-
-                if self.gauge_uncertainty():
-                    if self.verbosity == 5:
-                        print("Uncertainty valid")
-
-                # move to previous MD step, compute DFT, update training set, retrain ML model
-                else:
-                    if self.verbosity == 5:
-                        print("Uncertainty invalid, computing DFT\n")
-
-                    self.take_timestep(-dt)
-                    run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
-                                 iscorrection=True, stepcount=n_step)
-                    self.retrain_ml_model()
+            # SIMON -- add uncertainty check to first time step
 
             n_step += 1
 
         while self.time < tf:
 
-            print("\n======================================\nStep: {}".format(n_step))
-            print("Current time: {}\n".format(self.time))
+            if self.verbosity > 1:
+                print("\n======================================\nStep: {}".format(n_step))
+                print("Current time: {}\n".format(self.time))
 
-
-            self.update_atom_forces()
             self.take_timestep(dt)
-            if self.assert_boundaries: self.assert_boundary_conditions()
-
-            if self.verbosity >= 3:
-                self.print_positions()
 
             # check uncertainty and retrain model if it exceeds specified threshold
             if (self.model == 'GP' or self.model == 'KRR') and self.threshold > 0:
@@ -301,9 +288,9 @@ class MD_engine():
                     if self.verbosity == 5:
                         print("Uncertainty invalid, computing DFT\n")
 
+                    self.qe_config.run_espresso(self.atoms, self.cell,
+                                                iscorrection=True, stepcount=n_step)
                     self.take_timestep(-dt)
-                    run_espresso(self.atoms, self.cell, qe_config=self.espresso_config,
-                                 iscorrection=True, stepcount=n_step)
                     self.retrain_ml_model()
 
             n_step += 1
@@ -322,7 +309,7 @@ class MD_engine():
           [a21 a22 a23] [b] = [x2]
           [a31 a32 a33] [c] = [x3]
 
-          And if we find that a, b, c not in [0,1) we modulo by 1.
+          And if we find that a, b, c not in [0,1)e modulo by 1.
         """
         a1 = self.cell[0]
         a2 = self.cell[1]
@@ -330,7 +317,6 @@ class MD_engine():
 
         for atom in self.atoms:
 
-            # TODO: CONVERT INV TO SOLVE LS
             coords = np.dot(la.inv(self.cell), atom.position)
             if self.verbosity == 5:
                 print('Atom positions before BC check:', atom.position)
@@ -354,7 +340,7 @@ class MD_engine():
             else:
                 print('Atom %d:' % n, np.round(pos, decimals=4))
 
-    def gauge_uncertainty(self):
+    def gauge_model_uncertainty(self):
         """
         Ceck if prediction's uncertainty is within an acceptable bound given by threshold.
         If not, run QE, add to training set and retrain ML model
@@ -364,13 +350,13 @@ class MD_engine():
 
         # Kernel Ridge Regression
         if self.model == "KRR":
-            pass
-            # @STEVEN: I commented this out since it gave errors, can you update it, thanks!
-            #
-            # config = KRR.config(self.atoms, self.cell)
-            # if self.threshold < KRR_uncertainty(configuration):
-            #     print("!! The uncertainty of the model is outside of the ")
-            #     return False
+            config = KRR_configuration(self.atoms, self.cell)
+            uncertainty = KRR_uncertainty(config, self.ML_model)
+            if self.verbosity >= 4:
+                print("Uncertainty at current configuration:", uncertainty)
+            if self.uncertainty_threshold < uncertainty:
+                if self.verbosity > 2: print("!! The uncertainty of the model is outside of the bounds; calling DFT...")
+                return False
 
         # Gaussian Process
         if self.model == "GP":
@@ -379,7 +365,9 @@ class MD_engine():
             energy, sigma = GP_energy(config, self.ML_model)
 
             if self.threshold < sigma:
-                print("\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}\nRunning DFT calculation\n".format(sigma[0]))
+                print(
+                    "\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}\nRunning DFT calculation\n".format(
+                        sigma[0]))
                 return False
 
         return True
@@ -394,23 +382,26 @@ class MD_engine():
 
         # Kernel Ridge Regression
         if self.model == 'KRR':
-            # @STEVEN: I commented this out since it gave errors, can you update it, thanks!
+            # TODO: MAKE KRR AND GP COHERENT CODE-WISE
+            init_train_set = np.array(self.ML_model.total_train_set)
+            init_train_ens = np.array(self.ML_model.total_train_ens)
+            aug_train_set, aug_train_ens = get_aug_values(self.qe_config.correction_folder, ML_model=self.ML_model)
+            positions = [aug_train_set[m * 3:(m + 1) * 3] for m in range(int(self.ML_model.vec_length / 3))]
+            aug_train_set = KRR_configuration(atoms=None, cell=self.cell, point_set=positions)
 
-            # init_train_set = self.ML_model.original_train_set
-            # init_train_ens = self.ML_model.original_train_ens
-            #
-            # aug_train_set, aug_train_ens = get_aug_values(self.espresso_config.correction_folder)
-            #
-            # new_train_set = np.concatenate(init_train_set, aug_train_set)
-            # new_train_ens = np.concatenate(init_train_ens, aug_train_ens)
-            #
-            # self.ML_model.quick_fit(new_train_set, new_train_ens, self.ML_model.alpha, self.ML_model.gamma)
-            # return
-            pass
+            if self.verbosity == 5:
+                print('Trying to reshape the augmented training set with shape ', aug_train_set.shape,
+                      'into the shape of ', init_train_set.shape)
+            new_train_set = np.concatenate((init_train_set, aug_train_set), axis=0)
+            new_train_ens = np.append(init_train_ens, aug_train_ens)
+            if self.verbosity == 5:
+                print('Augmented and original set now has shape of:', new_train_set.shape)
+            self.ML_model.fit(new_train_set, new_train_ens)
+            self.ML_model.total_train_set = np.array(new_train_set)
+            self.ML_model.total_train_ens = np.array(new_train_ens)
 
         # Gaussian Process
         if self.model == "GP":
-
             # update training set
             x_init = self.ML_model.original_train_set
             y_init = self.ML_model.original_train_ens
@@ -440,12 +431,13 @@ class Atom():
     mass:           float, atom mass
     element:        str, chemical species
     constraint:     list of booleans, apply constraint or not
+    fractional:     boolean, if coordinates are fractional in their original cell
     """
     mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855}
 
     def __init__(self, position=[0., 0., 0.], velocity=[0., 0., 0.], force=[0., 0., 0.], initial_pos=[0, 0, 0],
                  mass=None,
-                 element='', constraint=[False, False, False]):
+                 element='', constraint=[False, False, False], fractional=False):
 
         self.position = np.array(position)
 
@@ -455,6 +447,7 @@ class Atom():
         self.force = np.array(force)
         self.element = element
 
+        self.fractional = bool(fractional)
         self.constraint = constraint
 
         self.fingerprint = rand.rand()  # This is how I tell atoms apart. Easier than indexing them manually...
@@ -473,7 +466,8 @@ class Atom():
                            'mass': self.mass,
                            'element': self.element,
                            'constraint': self.constraint,
-                           'initial_pos': self.initial_pos}
+                           'initial_pos': self.initial_pos,
+                           'fractional coordinate:': self.fractional}
 
     def __str__(self):
         return str(self.parameters)
@@ -494,26 +488,109 @@ class Atom():
                 self.force[n] = 0.
 
 
+# class ESPRESSO_config(object):
+#     """
+#     Class that holds configuration for QE run
+#
+#     # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
+#     # TODO: make k-point mesh a 3-dim array, include check for int vs. list
+#
+#     Parameters
+#     ----------
+#     workdir:            str, working directory
+#     run_pwscf:          str, path to pwscf command
+#     pseudopotentials:   dictionary, holds pseudopotential object w/ path and functional type per chemical species
+#     molecule:           boolean, molecular system or not
+#     nk:                 integer, k-point mesh used for DFT
+#     correction_folder:  str, ?
+#     system_name:        str, name for materials system
+#     correction_number   int, ?
+#     ecut:               int, wavefunction cutoff
+#     qe_mode:               str, run QE in serial or parallel, default: parallel
+#     """
+#
+#     def __init__(self, workdir=None, run_pwscf=None, pseudopotentials=None,
+#                  molecule=False, nk=15, correction_folder=None, system_name="", correction_number=0, ecut=40,
+#                  parallelization={'np':1, 'nk':0, 'nt':0, 'nd':0}):
+#
+#         # Where to store QE calculations
+#         self.workdir = os.environ['PROJDIR'] + '/AIMD'
+#         print("\nWorking directory initialized: {}".format(self.workdir))
+#
+#         # Runs the PWSCF
+#         self.run_pwscf = os.environ['PWSCF_COMMAND']
+#         print("\nPWSCF_COMMAND: {}".format(self.run_pwscf))
+#
+#         # Helpful dictionary of pseudopotential objects
+#         self.pseudopotentials = {"H": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='uspp', element='H',
+#                                                       functional='GGA', name='H.pbe-kjpaw.UPF'),
+#                                  "Si": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='?', element='Si',
+#                                                        functional='?', name='Si.pz-vbc.UPF'),
+#                                  'Al': PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='upf', element='Al',
+#                                                        functional='PZ', name='Al.pz-vbc.UPF')}
+#         # Periodic boundary conditions and nk X nk X nk k-point mesh,
+#         # or no PBCs and Gamma k point only
+#
+#         # TODO: RENAME THIS TO SYSTEM_TYPE OR SOMETHING MORE GENERAL
+#         self.molecule = molecule
+#         self.parallelization = dict(parallelization)
+#
+#         # Dimensions of k point grid
+#         self.nk = nk
+#
+#         # Will be used for correction folders later
+#         self.system_name = system_name
+#         print("\nSystem name: {}".format(self.system_name.title()))
+#
+#         self.correction_folder = correction_folder or self.workdir
+#         print("\nCorrection folder: {}".format(self.correction_folder))
+#
+#         self.correction_number = self.get_correction_number()
+#         print("\nCorrection number: {}".format(self.correction_number))
+#
+#         self.ecut = ecut
+#
+#
+#     def get_correction_number(self):
+#         folders_in_correction_folder = list(os.walk(self.correction_folder))[0][1]
+#
+#         steps = [fold for fold in folders_in_correction_folder if self.system_name + "_step_" in fold]
+#
+#         if len(steps) >= 1:
+#             stepvals = [int(fold.split('_')[-1]) for fold in steps]
+#             correction_number = max(stepvals)
+#         else:
+#             return 0
+#         return correction_number + 1
+
 class ESPRESSO_config(object):
-    """
-    Class that holds configuration for QE run
+    def __init__(self, workdir=None, run_pwscf=None, pseudopotentials=None,
+                 molecule=False, nk=15, correction_folder=None, system_name="AIMD", correction_number=0, ecut=40,
+                 parallelization={'np': 1, 'nk': 0, 'nt': 0, 'nd': 0}):
 
-    # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
-    # TODO: make k-point mesh a 3-dim array, include check for int vs. list
+        # Where to store QE calculations
+        self.workdir = os.environ['PROJDIR'] + '/AIMD'
+        # Runs the PWSCF
+        self.run_pwscf = os.environ['PWSCF_COMMAND']
+        # Helpful dictionary of pseudopotential objects
+        self.pseudopotentials = {"H": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='uspp', element='H',
+                                                      functional='GGA', name='H.pbe-kjpaw.UPF'),
+                                 "Si": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='?', element='Si',
+                                                       functional='?', name='Si.pz-vbc.UPF'),
+                                 'Al': PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='upf', element='Al',
+                                                       functional='PZ', name='Al.pz-vbc.UPF')}
+        # Periodic boundary conditions and nk X nk X nk k-point mesh,
+        # or no PBCs and Gamma k point only
+        self.molecule = molecule
+        self.parallelization = dict(parallelization)
 
-    Parameters
-    ----------
-    workdir:            str, working directory
-    run_pwscf:          str, path to pwscf command
-    pseudopotentials:   dictionary, holds pseudopotential object w/ path and functional type per chemical species
-    molecule:           boolean, molecular system or not
-    nk:                 integer, k-point mesh used for DFT
-    correction_folder:  str, ?
-    system_name:        str, name for materials system
-    correction_number   int, ?
-    ecut:               int, wavefunction cutoff
-    qe_mode:               str, run QE in serial or parallel, default: parallel
-    """
+        self.system_name = system_name
+        self.ecut = ecut
+        self.nk = nk  # Dimensions of k point grid
+
+        # Will be used for correction folders later
+        self.correction_folder = correction_folder or self.workdir
+        self.correction_number = self.get_correction_number()
 
     def get_correction_number(self):
         folders_in_correction_folder = list(os.walk(self.correction_folder))[0][1]
@@ -527,47 +604,76 @@ class ESPRESSO_config(object):
             return 0
         return correction_number + 1
 
-    def __init__(self, workdir=None, run_pwscf=None, pseudopotentials=None,
-                 molecule=False, nk=15, correction_folder=None, system_name="", correction_number=0, ecut=40, qe_mode = 'parallel'):
+    def run_espresso(self, atoms, cell, iscorrection=False):
 
-        # Where to store QE calculations
-        self.workdir = os.environ['PROJDIR'] + '/AIMD'
-        print("\nWorking directory initialized: {}".format(self.workdir))
+        pseudopots = {}
+        elements = [atom.element for atom in atoms]
+        for element in elements:
+            pseudopots[element] = self.pseudopotentials[element]
 
-        # Runs the PWSCF
-        self.run_pwscf = os.environ['PWSCF_COMMAND']
-        print("\nPWSCF_COMMAND: {}".format(self.run_pwscf))
+        ase_struc = Atoms(symbols=[atom.element for atom in atoms],
+                          positions=[atom.position for atom in atoms],
+                          cell=cell,
+                          pbc=[0, 0, 0] if self.molecule else [1, 1, 1])
 
-        # Helpful dictionary of pseudopotential objects
-        self.pseudopotentials = {"H": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='uspp', element='H',
-                                                      functional='GGA', name='H.pbe-kjpaw.UPF'),
-                                 "Si": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='?', element='Si',
-                                                       functional='?', name='Si.pz-vbc.UPF'),
-                                 'Al': PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='upf', element='Al',
-                                                       functional='PZ', name='Al.pz-vbc.UPF')}
-        # Periodic boundary conditions and nk X nk X nk k-point mesh,
-        # or no PBCs and Gamma k point only
+        struc = Struc(ase2struc(ase_struc))
 
-        # TODO: RENAME THIS TO SYSTEM_TYPE OR SOMETHING MORE GENERAL
-        self.molecule = molecule
+        if self.molecule:
+            kpts = Kpoints(gridsize=[1, 1, 1], option='gamma', offset=False)
+        else:
+            nk = self.nk
+            kpts = Kpoints(gridsize=[nk, nk, nk], option='automatic', offset=False)
 
-        # Dimensions of k point grid
-        self.nk = nk
+        if iscorrection:
+            self.correction_number = self.get_correction_number()
+            # print("rolling with correction number",qe_config.correction_number)
+            dirname = self.system_name + '_step_' + str(self.correction_number)
+        else:
+            dirname = 'temprun'
+        runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "AIMD", dirname))
+        input_params = PWscf_inparam({
+            'CONTROL': {
+                'prefix': self.system_name,
+                'calculation': 'scf',
+                'pseudo_dir': os.environ['ESPRESSO_PSEUDO'],
+                'outdir': runpath.path,
+                #            'wfcdir': runpath.path,
+                'disk_io': 'low',
+                'tprnfor': True,
+                'wf_collect': False
+            },
+            'SYSTEM': {
+                'ecutwfc': self.ecut,
+                'ecutrho': self.ecut * 8,
+                #           'nspin': 4 if 'rel' in potname else 1,
 
-        # Run QE parallel or serial
-        self.qe_mode = qe_mode
+                'occupations': 'smearing',
+                'smearing': 'mp',
+                'degauss': 0.02,
+                # 'noinv': False
+                # 'lspinorb':True if 'rel' in potname else False,
+            },
+            'ELECTRONS': {
+                'diagonalization': 'david',
+                'mixing_beta': 0.5,
+                'conv_thr': 1e-7
+            },
+            'IONS': {},
+            'CELL': {},
+        })
 
-        # Will be used for correction folders later
-        self.system_name = system_name
-        print("\nSystem name: {}".format(self.system_name.title()))
+        output_file = run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
+                                   params=input_params, kpoints=kpts,
+                                   ncpu=1, parallelization=self.parallelization)
+        output = parse_qe_pwscf_output(outfile=output_file)
 
-        self.correction_folder = correction_folder or self.workdir
-        print("\nCorrection folder: {}".format(self.correction_folder))
+        with open(runpath.path + '/en', 'w') as f:
+            f.write(str(output['energy']))
+        with open(runpath.path + '/pos', 'w')as f:
+            for pos in [atom.position for atom in atoms]:
+                f.write(str(pos) + '\n')
 
-        self.correction_number = self.get_correction_number()
-        print("\nCorrection number: {}".format(self.correction_number))
-
-        self.ecut = ecut
+        return output
 
 
 def first_derivative_2nd(fm, fp, h):
@@ -591,85 +697,84 @@ def first_derivative_4th(fmm, fm, fp, fpp, h):
     return (fmm / 12. - 2 * fm / 3. + 2 * fp / 3. - fpp / 12.) / float(h)
 
 
-def run_espresso(atoms, cell, qe_config=None, ecut=40, molecule=True, stepcount=0, iscorrection=False):
-    """
-    Run QE w/ specified configuration
-    """
-
-    # TODO W/ STEVEN: WE'RE CONSTRUCTING THIS PSEUDOPOT DICTIONARY EVERY TIME FROM SCRATCH, WAY AROUND THAT?
-    pseudopots = {}
-    elements = [atom.element for atom in atoms]
-    for element in elements:
-        pseudopots[element] = qe_config.pseudopotentials[element]
-
-    # define system's ASE structure
-    ase_struc = Atoms(symbols=[atom.element for atom in atoms],
-                      positions=[atom.position for atom in atoms],
-                      cell=cell,
-                      pbc=[0, 0, 0] if molecule else [1, 1, 1])
-
-    struc = Struc(ase2struc(ase_struc))
-
-    # QE run config
-    if qe_config.molecule:
-        kpts = Kpoints(gridsize=[1, 1, 1], option='gamma', offset=False)
-    else:
-        nk = qe_config.nk
-        kpts = Kpoints(gridsize=[nk, nk, nk], option='automatic', offset=False)
-
-    if iscorrection:
-        dirname = 'step_' + str(stepcount)
-    else:
-        dirname = 'temprun'
-    runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "AIMD", dirname))
-
-
-    # write QE input file
-    input_params = PWscf_inparam({
-        'CONTROL': {
-            'prefix': 'AIMD',
-            'calculation': 'scf',
-            'pseudo_dir': os.environ['ESPRESSO_PSEUDO'],
-            'outdir': runpath.path,
-            # 'wfcdir': runpath.path,
-            'disk_io': 'low',
-            'tprnfor': True,
-            'wf_collect': False
-        },
-        'SYSTEM': {
-            'ecutwfc': ecut,
-            'ecutrho': ecut * 8,
-            # 'nspin': 4 if 'rel' in potname else 1,
-
-            'occupations': 'smearing',
-            'smearing': 'mp',
-            'degauss': 0.02,
-            # 'noinv': False
-            # 'lspinorb':True if 'rel' in potname else False,
-        },
-        'ELECTRONS': {
-            'diagonalization': 'david',
-            'mixing_beta': 0.5,
-            'conv_thr': 1e-7
-        },
-        'IONS': {},
-        'CELL': {},
-    })
-
-    # run QE and parse output
-    output_file = run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
-                               params=input_params, kpoints=kpts,
-                               ncpu=1, qe_mode=qe_config.qe_mode)
-    output = parse_qe_pwscf_output(outfile=output_file)
-
-    # write results to file
-    with open(runpath.path + '/en', 'w') as f:
-        f.write(str(output['energy']))
-    with open(runpath.path + '/pos', 'w')as f:
-        for pos in [atom.position for atom in atoms]:
-            f.write(str(pos) + '\n')
-
-    return output
+# def run_espresso(atoms, cell, qe_config=None, ecut=40, molecule=True, stepcount=0, iscorrection=False):
+#     """
+#     Run QE w/ specified configuration
+#     """
+#
+#     # TODO W/ STEVEN: WE'RE CONSTRUCTING THIS PSEUDOPOT DICTIONARY EVERY TIME FROM SCRATCH, WAY AROUND THAT?
+#     pseudopots = {}
+#     elements = [atom.element for atom in atoms]
+#     for element in elements:
+#         pseudopots[element] = qe_config.pseudopotentials[element]
+#
+#     # define system's ASE structure
+#     ase_struc = Atoms(symbols=[atom.element for atom in atoms],
+#                       positions=[atom.position for atom in atoms],
+#                       cell=cell,
+#                       pbc=[0, 0, 0] if molecule else [1, 1, 1])
+#
+#     struc = Struc(ase2struc(ase_struc))
+#
+#     # QE run config
+#     if qe_config.molecule:
+#         kpts = Kpoints(gridsize=[1, 1, 1], option='gamma', offset=False)
+#     else:
+#         nk = qe_config.nk
+#         kpts = Kpoints(gridsize=[nk, nk, nk], option='automatic', offset=False)
+#
+#     if iscorrection:
+#         dirname = 'step_' + str(stepcount)
+#     else:
+#         dirname = 'temprun'
+#     runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "AIMD", dirname))
+#
+#     # write QE input file
+#     input_params = PWscf_inparam({
+#         'CONTROL': {
+#             'prefix': 'AIMD',
+#             'calculation': 'scf',
+#             'pseudo_dir': os.environ['ESPRESSO_PSEUDO'],
+#             'outdir': runpath.path,
+#             # 'wfcdir': runpath.path,
+#             'disk_io': 'low',
+#             'tprnfor': True,
+#             'wf_collect': False
+#         },
+#         'SYSTEM': {
+#             'ecutwfc': ecut,
+#             'ecutrho': ecut * 8,
+#             # 'nspin': 4 if 'rel' in potname else 1,
+#
+#             'occupations': 'smearing',
+#             'smearing': 'mp',
+#             'degauss': 0.02,
+#             # 'noinv': False
+#             # 'lspinorb':True if 'rel' in potname else False,
+#         },
+#         'ELECTRONS': {
+#             'diagonalization': 'david',
+#             'mixing_beta': 0.5,
+#             'conv_thr': 1e-7
+#         },
+#         'IONS': {},
+#         'CELL': {},
+#     })
+#
+#     # run QE and parse output
+#     output_file = run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
+#                                params=input_params, kpoints=kpts,
+#                                ncpu=1, qe_mode=qe_config.parallelization)
+#     output = parse_qe_pwscf_output(outfile=output_file)
+#
+#     # write results to file
+#     with open(runpath.path + '/en', 'w') as f:
+#         f.write(str(output['energy']))
+#     with open(runpath.path + '/pos', 'w')as f:
+#         for pos in [atom.position for atom in atoms]:
+#             f.write(str(pos) + '\n')
+#
+#     return output
 
 
 def SHO_config(atoms):
@@ -735,18 +840,57 @@ def LJ_energy(atoms, rm=.5, eps=10., debug=False):
     return E
 
 
-def KRR_config(atoms, cell):
-    """
-    Compute input config for Kernel Ridge Regression
-    :return: proper input config
-    """
-    coords = np.empty(shape=(3, len(atoms)))
+#
+# def KRR_config(atoms, cell):
+#     """
+#     Compute input config for Kernel Ridge Regression
+#     :return: proper input config
+#     """
+#     coords = np.empty(shape=(3, len(atoms)))
+#
+#     for n in range(len(atoms)):
+#         # TODO: CONVERT INVERT TO LINEAR SYSTEM
+#         coords[:, n] = np.dot(la.inv(cell), atoms[n].position)
+#
+#     return coords.T.flatten().reshape(1, -1)
 
-    for n in range(len(atoms)):
-        # TODO: CONVERT INVERT TO LINEAR SYSTEM
-        coords[:, n] = np.dot(la.inv(cell), atoms[n].position)
 
-    return coords.T.flatten().reshape(1, -1)
+def KRR_configuration(atoms=None, cell=None, point_set=None, fractional=True):
+    """
+    Pass the atoms either as a list of 'atoms', or as a list of lists each of length three representing
+        the positions of the atoms.
+
+    atoms: List of atoms
+    cell: 3x3 matrix defining the cell of the system
+    point_set: Alternate mode of input for debugging or for calling outside of the MD engine
+    fractional: If true, will *convert* the positions into fractional coordinates. If the positions are *already*
+            in fractional form, ensure that the cell is sized appropriately.
+    """
+    # Either pass atoms or make sure that positions is a list of lists of length three
+
+    cell = None or cell
+
+    # Fork between the two input methods
+    if atoms != None:
+        positions = [at.position for at in atoms]
+
+        coords = np.empty(shape=(3, len(atoms)))
+        if atoms[0].fractional is True:
+            for n in range(len(atoms)):
+                coords[:, n] = np.dot(cell, atoms[n].position)
+            return coords.T.flatten().reshape(1, -1)
+
+        else:
+            return np.array(positions).flatten()
+
+    else:
+        coords = np.empty(shape=(3, int(len(point_set))))
+        if fractional is True:
+            for n in range(len(point_set)):
+                coords[:, n] = np.dot(la.inv(cell), point_set[n])
+            return coords.T.flatten().reshape(1, -1)
+        else:
+            return np.array(point_set).flatten().reshape(1, -1)
 
 
 def KRR_energy(krrconfig, model):
@@ -772,6 +916,36 @@ def GP_config(atoms, cell):
     return coords
 
 
+def KRR_uncertainty(krrconfig, model, kernel=False, measure='min', norm_order=2):
+    """
+    Computes a form of the uncertainty. Typically returns the euclidean norm between the
+        input x and all of the x points in the training set. 'Kernel' flag uses the
+        kernel as the thing to compute distances between. Measure is 'min' versus 'mean', which uses the
+        minimum versus mean uncertainty.
+
+    krrconfig: The KRR configuration
+    model: The KRR model to compute the uncertainty of a configuration from
+    measure: 'min' to return the minimum uncertainty, 'mean' to return the average uncertainty
+    norm_order: Allows for different vector norm orders to be taken.
+    """
+
+    deviations = [la.norm(krrconfig - x, ord=norm_order) for x in model.total_train_set]
+
+    if kernel == True:
+        kerneldev = [model.gamma * dev ** 2 for dev in deviations]
+    print(np.min(deviations))
+    if measure == 'min':
+        if kernel:
+            return np.min(kerneldev)
+        else:
+            return np.min(deviations)
+    if measure == 'mean':
+        if kernel:
+            return np.mean(kerneldev)
+        else:
+            return np.mean(deviations)
+
+
 def GP_energy(gpconfig, model):
     """
     Compute energy w/ Gaussian Process
@@ -779,16 +953,60 @@ def GP_energy(gpconfig, model):
     return model.predict(gpconfig, return_std=True)
 
 
+# def get_aug_values(correction_folder, keyword='step', ML_model=None):
+#     """
+#     Update training set
+#     """
+#     energies = []
+#     positions = []
+#     forces = []
+#     indices = []
+#     if len([folder for folder in list(os.walk(correction_folder))[0][1]]) > 0:
+#         for fold in [folder for folder in list(os.walk(correction_folder))[0][1] if keyword in folder]:
+#             index = int(fold.split("_")[-1])
+#             if ML_model != None:
+#                 if index not in ML_model.aug_indices:
+#                     ML_model.aug_indices.append(index)
+#                 else:
+#                     continue
+#             fold = correction_folder + '/' + fold
+#
+#             # print("\nFolder: {}\n".format(fold))
+#             with open(fold + '/en', 'r') as f:
+#                 energies.append(float(f.readlines()[0]))
+#
+#             with open(fold + '/pos', 'r') as f:
+#                 read_pos = f.readlines()
+#                 for n in range(len(read_pos)):
+#                     curr_pos = read_pos[n].strip().strip('[').strip('\n').strip(']')
+#                     # print(curr_pos)
+#                     curr_pos = [float(x) for x in curr_pos.split()]
+#                     for x in curr_pos:
+#                         positions.append(x)
+#
+#             # print("\nFound positions: {}\nFound energies:  {}\n".format(positions, energies))
+#             return positions, energies
+
+
 def get_aug_values(correction_folder, keyword='step', ML_model=None):
     """
-    Update training set
+    Retrieves the position and energy information from a 'correction folder' which contains ESPRESSO runs
+    used to train the dataset. Keyword denotes the substring in the name of a folder that is
+
+    correction_folder: path to folder which contains folders of QE runs which will augment the training set
+    keyword: substring to look for in a folder to parse it for the position and energy information
+
     """
+
     energies = []
     positions = []
     forces = []
     indices = []
+
     if len([folder for folder in list(os.walk(correction_folder))[0][1]]) > 0:
+        # Iterate through the folders in the correction folder which contain the keyword
         for fold in [folder for folder in list(os.walk(correction_folder))[0][1] if keyword in folder]:
+            # The folders should have a naming convention involving ending with an underscore and a number
             index = int(fold.split("_")[-1])
             if ML_model != None:
                 if index not in ML_model.aug_indices:
@@ -796,8 +1014,7 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
                 else:
                     continue
             fold = correction_folder + '/' + fold
-
-            # print("\nFolder: {}\n".format(fold))
+            print(fold)
             with open(fold + '/en', 'r') as f:
                 energies.append(float(f.readlines()[0]))
 
@@ -805,10 +1022,15 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
                 read_pos = f.readlines()
                 for n in range(len(read_pos)):
                     curr_pos = read_pos[n].strip().strip('[').strip('\n').strip(']')
-                    # print(curr_pos)
+                    print(curr_pos)
                     curr_pos = [float(x) for x in curr_pos.split()]
                     for x in curr_pos:
                         positions.append(x)
 
-            # print("\nFound positions: {}\nFound energies:  {}\n".format(positions, energies))
+            print("Found positions", positions, "and energies", energies)
+
             return positions, energies
+    else:
+        print("WARNING!! Correction folder", correction_folder, " seems to have no folders in it--",
+              " attempt at sourcing files for augmentation runs failed! ")
+        return None

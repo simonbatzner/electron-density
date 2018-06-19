@@ -259,7 +259,7 @@ def parse_args():
                         help='maximum of range for periodicity for expsinesquared kernel')
     parser.add_argument('--alat', type=float, default=4.10)
     parser.add_argument('--verbosity', type=int, default=5, help='1 to 5')
-    parser.add_argument('--qe_mode', type=str, default='parallel', help='run espresso in "parallel" or "serial"')
+    parser.add_argument('--n_cpu', type=int, default='2')
 
     args = parser.parse_args()
     return args
