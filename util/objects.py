@@ -1,5 +1,5 @@
 import ase, json
-from util import *
+from util.util import *
 
 
 class Generic(object):
@@ -7,6 +7,7 @@ class Generic(object):
     The basic class for a data object. it is defined by the attribute content which can be a number,
     string, list or a dict.
     """
+
     def __init__(self, *args, **kwargs):
         if args:
             # in case of a single literal or a dict being supplied
@@ -26,6 +27,7 @@ class Generic(object):
 
 class Path(Generic):
     """data class used to store OS path objects as a dict {'path': <path_string>} """
+
     @property
     def path(self):
         return self.content['path']
@@ -42,7 +44,6 @@ class File(Path):
 
 
 class TextFile(File):
-
     @property
     def text(self):
         return self.content['text']
@@ -74,8 +75,6 @@ class Constraint(Param):
     pass
 
 
-
-
 class Struc(Param):
     """
     Data class containing information about a structure
@@ -88,6 +87,7 @@ class Struc(Param):
                                 ['He', [4.0, 5.0, 9.0]]],
                  }
     """
+
     @staticmethod
     def from_ase(aseobj):
         # need to use method tolist() of numpy arrays to get valid json
@@ -152,6 +152,7 @@ class Potential(File):
 
 class PseudoPotential(Potential):
     """Data class to store information about a Pseudo Potential file"""
+
     def __init__(self, **kwargs):
         if 'path' not in kwargs:
             name = kwargs['name']
@@ -162,11 +163,13 @@ class PseudoPotential(Potential):
 
 class ClassicalPotential(Potential):
     """ Classical potential, e.g. EAM, Buckingham, OPLS etc """
+
     def __init__(self, **kwargs):
         if 'path' not in kwargs:
             potpath = os.path.join(os.environ['LAMMPS_POTENTIALS'], kwargs['name'])
             kwargs.update({'path': potpath})
         super().__init__(**kwargs)
+
     pass
 
 

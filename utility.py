@@ -17,7 +17,7 @@ from util.project_pwscf import *
 
 class MD_engine():
     def __init__(self, input_atoms=[], cell=np.eye(3), dx=.1, verbosity=1, model='SHO', store_trajectory=True,
-                 espresso_config=None, thermo_config=None, ML_model=None, assert_boundaries=True, fd_accuracy=2,
+                 qe_config=None, thermo_config=None, ML_model=None, assert_boundaries=True, fd_accuracy=2,
                  uncertainty_threshold=0, energy_or_force_driven='energy'):
 
         # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
@@ -31,7 +31,7 @@ class MD_engine():
         verbosity:              integer, ranges from 0 to 5 which determines how much information will be printed about runs.
         model:                  string, energy model used
         store_trajectory:       boolean, if positions will be saved after every time step.
-        espresso_config:        Espresso_config object, determines how on-the-fly quantum espresso runs will be
+        qe_config:               Espresso_config object, determines how on-the-fly quantum espresso runs will be
                                 parameterized
         thermo_config:          Thermo config object, determines the thermostate methodology that will be used
                                 for molecular dynamics.
@@ -68,7 +68,7 @@ class MD_engine():
                 self.trajs.append([])
 
         # config
-        self.espresso_config = espresso_config or None
+        self.qe_config = qe_config or None
         self.thermo_config = thermo_config or None
         self.ML_model = ML_model or None
 
@@ -206,7 +206,7 @@ class MD_engine():
         self.update_atom_forces()
 
         atoms = atoms or self.atoms
-        dt = dt or self.dt
+        # dt = dt  # or self.dt  # @STEVEN: COMMENTED THIS OUT -- MD_engine object has not attribute 'dt'
         method = method or "Verlet"
         self.time += dt
 
@@ -260,10 +260,24 @@ class MD_engine():
 
             # Very first timestep often doesn't have the 'previous position' to use, instead use third-order Euler method
             # using information about the position, velocity (if provided) and force
+            self.take_timestep(dt=dt, method='TO_Euler')
 
-            self.take_timestep(dt, method='TO_Euler')
+            # check uncertainty and retrain model if it exceeds specified threshold
+            if (self.model == 'GP' or self.model == 'KRR') and self.uncertainty_threshold > 0:
 
-            # SIMON -- add uncertainty check to first time step
+                if self.gauge_model_uncertainty():
+                    if self.verbosity == 5:
+                        print("Uncertainty valid")
+
+                # move to previous md step, compute DFT, update training set, retrain ML model
+                else:
+                    if self.verbosity == 5:
+                        print("Uncertainty invalid, computing DFT\n")
+
+                    self.qe_config.run_espresso(self.atoms, self.cell,
+                                                iscorrection=True, stepcount=n_step)
+                    self.take_timestep(dt=-dt)
+                    self.retrain_ml_model()
 
             n_step += 1
 
@@ -273,12 +287,12 @@ class MD_engine():
                 print("\n======================================\nStep: {}".format(n_step))
                 print("Current time: {}\n".format(self.time))
 
-            self.take_timestep(dt)
+            self.take_timestep(dt=dt)
 
             # check uncertainty and retrain model if it exceeds specified threshold
-            if (self.model == 'GP' or self.model == 'KRR') and self.threshold > 0:
+            if (self.model == 'GP' or self.model == 'KRR') and self.uncertainty_threshold > 0:
 
-                if self.gauge_uncertainty():
+                if self.gauge_model_uncertainty():
                     if self.verbosity == 5:
                         print("Uncertainty valid")
                     continue
@@ -290,7 +304,7 @@ class MD_engine():
 
                     self.qe_config.run_espresso(self.atoms, self.cell,
                                                 iscorrection=True, stepcount=n_step)
-                    self.take_timestep(-dt)
+                    self.take_timestep(dt=-dt)
                     self.retrain_ml_model()
 
             n_step += 1
@@ -364,9 +378,9 @@ class MD_engine():
             config = GP_config(self.atoms, self.cell)
             energy, sigma = GP_energy(config, self.ML_model)
 
-            if self.threshold < sigma:
+            if self.uncertainty_threshold < sigma:
                 print(
-                    "\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}\nRunning DFT calculation\n".format(
+                    "\nCAUTION: The uncertainty of the model is outside of the specified threshold: sigma = {}\n".format(
                         sigma[0]))
                 return False
 
@@ -406,7 +420,7 @@ class MD_engine():
             x_init = self.ML_model.original_train_set
             y_init = self.ML_model.original_train_ens
 
-            x_add, y_add = get_aug_values(self.espresso_config.correction_folder)
+            x_add, y_add = get_aug_values(self.qe_config.correction_folder)
 
             x_upd = np.concatenate((x_init, np.asarray(x_add)[:, None].T), axis=0)
             y_upd = np.concatenate((y_init, np.asarray(y_add)[:, None]), axis=0)
@@ -488,81 +502,6 @@ class Atom():
                 self.force[n] = 0.
 
 
-# class ESPRESSO_config(object):
-#     """
-#     Class that holds configuration for QE run
-#
-#     # @STEVEN: PLESE CHECK WHETHER I SPECIFIED PARAMS CORRECTLY IN DOCS
-#     # TODO: make k-point mesh a 3-dim array, include check for int vs. list
-#
-#     Parameters
-#     ----------
-#     workdir:            str, working directory
-#     run_pwscf:          str, path to pwscf command
-#     pseudopotentials:   dictionary, holds pseudopotential object w/ path and functional type per chemical species
-#     molecule:           boolean, molecular system or not
-#     nk:                 integer, k-point mesh used for DFT
-#     correction_folder:  str, ?
-#     system_name:        str, name for materials system
-#     correction_number   int, ?
-#     ecut:               int, wavefunction cutoff
-#     qe_mode:               str, run QE in serial or parallel, default: parallel
-#     """
-#
-#     def __init__(self, workdir=None, run_pwscf=None, pseudopotentials=None,
-#                  molecule=False, nk=15, correction_folder=None, system_name="", correction_number=0, ecut=40,
-#                  parallelization={'np':1, 'nk':0, 'nt':0, 'nd':0}):
-#
-#         # Where to store QE calculations
-#         self.workdir = os.environ['PROJDIR'] + '/AIMD'
-#         print("\nWorking directory initialized: {}".format(self.workdir))
-#
-#         # Runs the PWSCF
-#         self.run_pwscf = os.environ['PWSCF_COMMAND']
-#         print("\nPWSCF_COMMAND: {}".format(self.run_pwscf))
-#
-#         # Helpful dictionary of pseudopotential objects
-#         self.pseudopotentials = {"H": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='uspp', element='H',
-#                                                       functional='GGA', name='H.pbe-kjpaw.UPF'),
-#                                  "Si": PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='?', element='Si',
-#                                                        functional='?', name='Si.pz-vbc.UPF'),
-#                                  'Al': PseudoPotential(path=os.environ["ESPRESSO_PSEUDO"], ptype='upf', element='Al',
-#                                                        functional='PZ', name='Al.pz-vbc.UPF')}
-#         # Periodic boundary conditions and nk X nk X nk k-point mesh,
-#         # or no PBCs and Gamma k point only
-#
-#         # TODO: RENAME THIS TO SYSTEM_TYPE OR SOMETHING MORE GENERAL
-#         self.molecule = molecule
-#         self.parallelization = dict(parallelization)
-#
-#         # Dimensions of k point grid
-#         self.nk = nk
-#
-#         # Will be used for correction folders later
-#         self.system_name = system_name
-#         print("\nSystem name: {}".format(self.system_name.title()))
-#
-#         self.correction_folder = correction_folder or self.workdir
-#         print("\nCorrection folder: {}".format(self.correction_folder))
-#
-#         self.correction_number = self.get_correction_number()
-#         print("\nCorrection number: {}".format(self.correction_number))
-#
-#         self.ecut = ecut
-#
-#
-#     def get_correction_number(self):
-#         folders_in_correction_folder = list(os.walk(self.correction_folder))[0][1]
-#
-#         steps = [fold for fold in folders_in_correction_folder if self.system_name + "_step_" in fold]
-#
-#         if len(steps) >= 1:
-#             stepvals = [int(fold.split('_')[-1]) for fold in steps]
-#             correction_number = max(stepvals)
-#         else:
-#             return 0
-#         return correction_number + 1
-
 class ESPRESSO_config(object):
     def __init__(self, workdir=None, run_pwscf=None, pseudopotentials=None,
                  molecule=False, nk=15, correction_folder=None, system_name="AIMD", correction_number=0, ecut=40,
@@ -604,8 +543,7 @@ class ESPRESSO_config(object):
             return 0
         return correction_number + 1
 
-    def run_espresso(self, atoms, cell, iscorrection=False):
-
+    def run_espresso(self, atoms, cell, stepcount=0, iscorrection=False):
         pseudopots = {}
         elements = [atom.element for atom in atoms]
         for element in elements:
@@ -625,19 +563,19 @@ class ESPRESSO_config(object):
             kpts = Kpoints(gridsize=[nk, nk, nk], option='automatic', offset=False)
 
         if iscorrection:
-            self.correction_number = self.get_correction_number()
-            # print("rolling with correction number",qe_config.correction_number)
-            dirname = self.system_name + '_step_' + str(self.correction_number)
+            dirname = 'step_' + str(self.system_name.title().strip('\'')) + '_' + str(stepcount)
         else:
             dirname = 'temprun'
+
         runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "AIMD", dirname))
+
         input_params = PWscf_inparam({
             'CONTROL': {
-                'prefix': self.system_name,
+                'prefix': self.system_name.title().strip('\''),
                 'calculation': 'scf',
                 'pseudo_dir': os.environ['ESPRESSO_PSEUDO'],
                 'outdir': runpath.path,
-                #            'wfcdir': runpath.path,
+                # 'wfcdir': runpath.path,
                 'disk_io': 'low',
                 'tprnfor': True,
                 'wf_collect': False
@@ -645,7 +583,7 @@ class ESPRESSO_config(object):
             'SYSTEM': {
                 'ecutwfc': self.ecut,
                 'ecutrho': self.ecut * 8,
-                #           'nspin': 4 if 'rel' in potname else 1,
+                # 'nspin': 4 if 'rel' in potname else 1,
 
                 'occupations': 'smearing',
                 'smearing': 'mp',
@@ -664,7 +602,7 @@ class ESPRESSO_config(object):
 
         output_file = run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
                                    params=input_params, kpoints=kpts,
-                                   ncpu=1, parallelization=self.parallelization)
+                                   parallelization=self.parallelization)
         output = parse_qe_pwscf_output(outfile=output_file)
 
         with open(runpath.path + '/en', 'w') as f:
@@ -695,86 +633,6 @@ def first_derivative_4th(fmm, fm, fp, fpp, h):
         print("Warning... Trying to divide by zero. Derivative will diverge.")
 
     return (fmm / 12. - 2 * fm / 3. + 2 * fp / 3. - fpp / 12.) / float(h)
-
-
-# def run_espresso(atoms, cell, qe_config=None, ecut=40, molecule=True, stepcount=0, iscorrection=False):
-#     """
-#     Run QE w/ specified configuration
-#     """
-#
-#     # TODO W/ STEVEN: WE'RE CONSTRUCTING THIS PSEUDOPOT DICTIONARY EVERY TIME FROM SCRATCH, WAY AROUND THAT?
-#     pseudopots = {}
-#     elements = [atom.element for atom in atoms]
-#     for element in elements:
-#         pseudopots[element] = qe_config.pseudopotentials[element]
-#
-#     # define system's ASE structure
-#     ase_struc = Atoms(symbols=[atom.element for atom in atoms],
-#                       positions=[atom.position for atom in atoms],
-#                       cell=cell,
-#                       pbc=[0, 0, 0] if molecule else [1, 1, 1])
-#
-#     struc = Struc(ase2struc(ase_struc))
-#
-#     # QE run config
-#     if qe_config.molecule:
-#         kpts = Kpoints(gridsize=[1, 1, 1], option='gamma', offset=False)
-#     else:
-#         nk = qe_config.nk
-#         kpts = Kpoints(gridsize=[nk, nk, nk], option='automatic', offset=False)
-#
-#     if iscorrection:
-#         dirname = 'step_' + str(stepcount)
-#     else:
-#         dirname = 'temprun'
-#     runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "AIMD", dirname))
-#
-#     # write QE input file
-#     input_params = PWscf_inparam({
-#         'CONTROL': {
-#             'prefix': 'AIMD',
-#             'calculation': 'scf',
-#             'pseudo_dir': os.environ['ESPRESSO_PSEUDO'],
-#             'outdir': runpath.path,
-#             # 'wfcdir': runpath.path,
-#             'disk_io': 'low',
-#             'tprnfor': True,
-#             'wf_collect': False
-#         },
-#         'SYSTEM': {
-#             'ecutwfc': ecut,
-#             'ecutrho': ecut * 8,
-#             # 'nspin': 4 if 'rel' in potname else 1,
-#
-#             'occupations': 'smearing',
-#             'smearing': 'mp',
-#             'degauss': 0.02,
-#             # 'noinv': False
-#             # 'lspinorb':True if 'rel' in potname else False,
-#         },
-#         'ELECTRONS': {
-#             'diagonalization': 'david',
-#             'mixing_beta': 0.5,
-#             'conv_thr': 1e-7
-#         },
-#         'IONS': {},
-#         'CELL': {},
-#     })
-#
-#     # run QE and parse output
-#     output_file = run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
-#                                params=input_params, kpoints=kpts,
-#                                ncpu=1, qe_mode=qe_config.parallelization)
-#     output = parse_qe_pwscf_output(outfile=output_file)
-#
-#     # write results to file
-#     with open(runpath.path + '/en', 'w') as f:
-#         f.write(str(output['energy']))
-#     with open(runpath.path + '/pos', 'w')as f:
-#         for pos in [atom.position for atom in atoms]:
-#             f.write(str(pos) + '\n')
-#
-#     return output
 
 
 def SHO_config(atoms):
@@ -840,21 +698,6 @@ def LJ_energy(atoms, rm=.5, eps=10., debug=False):
     return E
 
 
-#
-# def KRR_config(atoms, cell):
-#     """
-#     Compute input config for Kernel Ridge Regression
-#     :return: proper input config
-#     """
-#     coords = np.empty(shape=(3, len(atoms)))
-#
-#     for n in range(len(atoms)):
-#         # TODO: CONVERT INVERT TO LINEAR SYSTEM
-#         coords[:, n] = np.dot(la.inv(cell), atoms[n].position)
-#
-#     return coords.T.flatten().reshape(1, -1)
-
-
 def KRR_configuration(atoms=None, cell=None, point_set=None, fractional=True):
     """
     Pass the atoms either as a list of 'atoms', or as a list of lists each of length three representing
@@ -908,7 +751,7 @@ def GP_config(atoms, cell):
     coords = np.empty(shape=(3, len(atoms)))
 
     for n in range(len(atoms)):
-        # TODO: CONVERT INV TO SOLVE LINEAR SYSTEM
+        # TODO BY SIMON: CONVERT INV TO SOLVE LINEAR SYSTEM
         coords[:, n] = np.dot(la.inv(cell), atoms[n].position)
 
     coords = coords.flatten()
@@ -953,41 +796,6 @@ def GP_energy(gpconfig, model):
     return model.predict(gpconfig, return_std=True)
 
 
-# def get_aug_values(correction_folder, keyword='step', ML_model=None):
-#     """
-#     Update training set
-#     """
-#     energies = []
-#     positions = []
-#     forces = []
-#     indices = []
-#     if len([folder for folder in list(os.walk(correction_folder))[0][1]]) > 0:
-#         for fold in [folder for folder in list(os.walk(correction_folder))[0][1] if keyword in folder]:
-#             index = int(fold.split("_")[-1])
-#             if ML_model != None:
-#                 if index not in ML_model.aug_indices:
-#                     ML_model.aug_indices.append(index)
-#                 else:
-#                     continue
-#             fold = correction_folder + '/' + fold
-#
-#             # print("\nFolder: {}\n".format(fold))
-#             with open(fold + '/en', 'r') as f:
-#                 energies.append(float(f.readlines()[0]))
-#
-#             with open(fold + '/pos', 'r') as f:
-#                 read_pos = f.readlines()
-#                 for n in range(len(read_pos)):
-#                     curr_pos = read_pos[n].strip().strip('[').strip('\n').strip(']')
-#                     # print(curr_pos)
-#                     curr_pos = [float(x) for x in curr_pos.split()]
-#                     for x in curr_pos:
-#                         positions.append(x)
-#
-#             # print("\nFound positions: {}\nFound energies:  {}\n".format(positions, energies))
-#             return positions, energies
-
-
 def get_aug_values(correction_folder, keyword='step', ML_model=None):
     """
     Retrieves the position and energy information from a 'correction folder' which contains ESPRESSO runs
@@ -1013,8 +821,9 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
                     ML_model.aug_indices.append(index)
                 else:
                     continue
+
             fold = correction_folder + '/' + fold
-            print(fold)
+
             with open(fold + '/en', 'r') as f:
                 energies.append(float(f.readlines()[0]))
 
@@ -1022,12 +831,12 @@ def get_aug_values(correction_folder, keyword='step', ML_model=None):
                 read_pos = f.readlines()
                 for n in range(len(read_pos)):
                     curr_pos = read_pos[n].strip().strip('[').strip('\n').strip(']')
-                    print(curr_pos)
+                    # print(curr_pos)
                     curr_pos = [float(x) for x in curr_pos.split()]
                     for x in curr_pos:
                         positions.append(x)
 
-            print("Found positions", positions, "and energies", energies)
+            # print("Found positions", positions, "and energies", energies)
 
             return positions, energies
     else:

@@ -4,6 +4,31 @@
 
 """" Production code -- Adaptive Machine-Learning Molecular Dynamics using Gaussian Processes
 
+    Parameters
+    ----------
+    partition           str, default: 'kozinsky'    -- partition to run on
+    data_dir            str, default: '.'           -- directory where training data are located
+    system_name         str, default='Al'           -- name of materials systek
+    system_type         str, default='solid'        -- "solid" or "molecule"'
+    kernel              str, default='rbf'          -- kernel used in gaussian process: "rbf", "matern", "c_rbf" or "expsinesquared"
+    length_scale        float, default=10           -- length-scale of Gaussian Process
+    length_scale_min    float, default=1e-3         -- minimum of range for length-scale
+    length_scale_max    float, default=1e3          -- maximum of range for length-scale
+    nu                  float, default=1.5          -- nu param in matern kernel
+    const_val           type=float, default=1.      -- constant value for constant kernel
+    const_val_min       float, default=1e-2         -- miminum of range for constant value for constant kernel
+    const_val_max       float, default=1e2          -- maximum of range for constant value for constant kernel
+    periodicity         float, default=1.           -- periodicity for expsinesquared kernel
+    periodicity_min     float, default=1e-2         -- miminum of range for periodicity for expsinesquared kernel
+    periodicity_max     float, default=1e2          -- maximum of range for periodicity for expsinesquared kernel')
+    alat                type=float, default=4.10    -- lattice parameter
+    np                  int, default=1              -- number of cores, 1 sets it so serial mode
+    nk                  int, default=0              -- number of k-points to work in parallel
+    nt                  int, default=0              #TODO: add this
+    nd                  int, default=0              -- number of threats which handle diagonlization
+    verbosity           int, default=5              -- verbosity of help from silent (1) to debuggin config (5)
+
+
     # References:
         [1] Brockherde et al. Bypassing the Kohn-Sham equations with machine learning. Nature Communications 8, 872 (2017)
         [2] http://scikit-learn.org/stable/auto_examples/gaussian_process/plot_gpr_noisy_targets.html
@@ -11,15 +36,6 @@
 
 Simon Batzner, Steven Torrisi, Jon Vandermause
 """
-
-########################################################################################################################
-# GENERAL TO-DOs:
-#
-# 1. as soon as we have force rep, we need to transition models from E to F; this especially concernes uncertainty
-# handling (currently done redundantly for E) and the finite-difference approx currently used to get F
-#
-# 2. integrate partition params w/ run config, just set environment variables depending on partition chosen
-########################################################################################################################
 
 from __future__ import absolute_import
 from __future__ import division
@@ -52,14 +68,14 @@ def set_scf(arguments):
     nk = 1
     dim = 1
 
-    print("QE mode: {}".format(arguments.qe_mode))
-
     if arguments.system_type == "solid":
         config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name,
-                                 qe_mode=arguments.qe_mode)
+                                 parallelization={'np': arguments.np, 'nk': arguments.nk, 'nt': arguments.nt,
+                                                  'nd': arguments.nd})
     elif arguments.system_type == "molecule":
         config = ESPRESSO_config(molecule=True, ecut=ecut, nk=nk, system_name=arguments.system_name,
-                                 qe_mode=arguments.qe_mode)
+                                 parallelization={'np': arguments.np, 'nk': arguments.nk, 'nt': arguments.nt,
+                                                  'nd': arguments.nd})
     else:
         raise ValueError('Please provide a proper system type: molecule or solid')
         sys.exit(1)
@@ -213,10 +229,10 @@ def main(arguments):
 
     # build MD engine
     GP_engine = MD_engine(cell=alat * np.eye(3), input_atoms=input_atoms, ML_model=gp, model='GP',
-                          store_trajectory=True, espresso_config=config, verbosity=arguments.verbosity,
+                          store_trajectory=True, qe_config=config, verbosity=arguments.verbosity,
                           assert_boundaries=False, dx=.1,
                           fd_accuracy=4,
-                          threshold=0.1)
+                          uncertainty_threshold=0.1)
 
     # run MD engine
     print("\nRunning MD engine...\n")
@@ -259,14 +275,18 @@ def parse_args():
                         help='maximum of range for periodicity for expsinesquared kernel')
     parser.add_argument('--alat', type=float, default=4.10)
     parser.add_argument('--verbosity', type=int, default=5, help='1 to 5')
-    parser.add_argument('--n_cpu', type=int, default='2')
+    parser.add_argument('--np', type=int, default='1')
+    parser.add_argument('--nk', type=int, default='0')
+    parser.add_argument('--nt', type=int, default='0')
+    parser.add_argument('--nd', type=int, default='0')
 
     args = parser.parse_args()
     return args
 
 
 if __name__ == '__main__':
-    global pref, pseudo_dir, outdir, alat, ecut, nk, dim, nat, pw_loc, in_name, out_name, sh_name, partition, memory, email, config
+    global pref, pseudo_dir, outdir, alat, ecut, nk, dim, nat, pw_loc, in_name, out_name, sh_name, partition, memory, email, config, verbosity
 
     arguments = parse_args()
+    verbosity = arguments.verbosity
     main(arguments=arguments)

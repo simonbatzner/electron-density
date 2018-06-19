@@ -1,4 +1,4 @@
-from objects import *
+from util.objects import *
 import numpy
 from util.util import *
 
@@ -87,43 +87,30 @@ def write_pwscf_input(runpath, params, struc, kpoints, pseudopots, constraint=No
     return infile
 
 
-##  def run_qe_pwscf(struc, runpath, pseudopots, params, kpoints, constraint=None, ncpu=1, qe_mode='parallel'):
-#     pwscf_code = ExternalCode({'path': os.environ['PWSCF_COMMAND']})
-#     prepare_dir(runpath.path)
-#     infile = write_pwscf_input(params=params, struc=struc, kpoints=kpoints, runpath=runpath,
-#                                pseudopots=pseudopots, constraint=constraint)
-#
-#     outfile = File({'path': os.path.join(runpath.path, 'pwscf.out')})
-#
-#     if qe_mode == 'serial':
-#         pwscf_command = "{} < {} > {}".format(pwscf_code.path, infile.path, outfile.path)
-#     else:
-#         pwscf_command = "mpirun -np {} {} < {} > {}".format(ncpu, pwscf_code.path, infile.path, outfile.path)
-#
-#     run_command(pwscf_command)
-#     return outfile
-
-def run_qe_pwscf(struc, runpath, pseudopots, params, kpoints, constraint=None, ncpu=2, parallelization={}):
+def run_qe_pwscf(struc, runpath, pseudopots, params, kpoints, constraint=None, parallelization={}):
     pwscf_code = ExternalCode({'path': os.environ['PWSCF_COMMAND']})
     prepare_dir(runpath.path)
     infile = write_pwscf_input(params=params, struc=struc, kpoints=kpoints, runpath=runpath,
                                pseudopots=pseudopots, constraint=constraint)
     outfile = File({'path': os.path.join(runpath.path, 'pwscf.out')})
 
-    parallelization_str = "mpirun "
+    # Compose two parallelization strings
+    parallelization_str_1 = "mpirun "  # Precedes pwscf command; parameterizes mpirun
+    parallelization_str_2 = " "  # Follows pwscf command; parameterizes pw.x parallelization
     if parallelization != {}:
         for key, value in parallelization.items():
-            if value != 0:
-                parallelization_str += '-%s %d ' % (key, value)
-    else:
-        parallelization_str = "-np %d" % (ncpu)
-
-    # serial
-    if ncpu == 1:
-        parallelization_str = ""
-
-    pwscf_command = "{} {} < {} > {}".format(parallelization_str, pwscf_code.path, infile.path, outfile.path)
-
+            if value != 0 and key != "np":
+                parallelization_str_2 += '-%s %d ' % (key, value)
+            if value != 0 and key == 'np':
+                parallelization_str_1 += '-%s %d' % (key, value)
+            if parallelization['np'] == 1:
+                parallelization_str_1 = ""
+                parallelization_str_2 = ""
+    else:  # If parallelization dict is empty, run in serial
+        parallelization_str_1 = ""
+        parallelization_str_2 = ""
+    pwscf_command = "{} {} {} -inp {} > {}".format(parallelization_str_1, pwscf_code.path, parallelization_str_2,
+                                                   infile.path, outfile.path)
     run_command(pwscf_command)
     return outfile
 
@@ -213,7 +200,7 @@ def parse_qe_pwscf_md_output(outfile):
     split_indexes = [N for N in range(len(lines)) if '!' == lines[N][0]]
 
     # Cut out the first chunk
-    # TODO: Analyze first chunk
+    # TODO BY STEVEN: Analyze first chunk
     first_chunk = lines[0:split_indexes[0]]
 
     step_chunks = []
@@ -304,7 +291,7 @@ def run_qe_pp(runpath, params, plot_vecs, ncpu=1):
     return outfile
 
 
-# TODO: MAKE THIS CONNECT TO PWSCF RUN OBJECTS.
+# TODO BY STEVEN: MAKE THIS CONNECT TO PWSCF RUN OBJECTS.
 # THIS IS ALSO UNFINISHED
 def write_pp_input(runpath, params, kpoints, pseudopots, constraint=None):
     """Make input param string for PW"""
