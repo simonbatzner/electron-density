@@ -1,5 +1,5 @@
 #!/bin/bash
-
+  
 # Git pre-commit script, runs py.test and checks code style
 # modified from: https://gist.github.com/msiemens/6278378
 
@@ -14,7 +14,7 @@ if [ "$changes_count" -ne "0" ]; then
 
         # Python 3
         echo "Running tests... (Python 3)"
-        py.test --color yes
+        py.test --color yes --ignore=$PROJDIR/start_here --ignore=$PROJDIR/data
         code=$?
 
         if [ "$code" -eq "0" ]; then
