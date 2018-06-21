@@ -72,11 +72,11 @@ def set_scf(arguments):
     nk = 1
     dim = 1
 
-    if arguments.system_type == "solid":
+    if arguments.system_type.strip('\'') == "solid":
         config = ESPRESSO_config(molecule=False, ecut=ecut, nk=nk, system_name=arguments.system_name,
                                  parallelization={'np': arguments.np, 'nk': arguments.nk, 'nt': arguments.nt,
                                                   'nd': arguments.nd})
-    elif arguments.system_type == "molecule":
+    elif arguments.system_type.strip('\'') == "molecule":
         config = ESPRESSO_config(molecule=True, ecut=ecut, nk=nk, system_name=arguments.system_name,
                                  parallelization={'np': arguments.np, 'nk': arguments.nk, 'nt': arguments.nt,
                                                   'nd': arguments.nd})
@@ -234,7 +234,7 @@ def main(arguments):
                           store_trajectory=True, qe_config=config, verbosity=arguments.verbosity,
                           assert_boundaries=False, dx=.1,
                           fd_accuracy=4,
-                          uncertainty_threshold=0.1)
+                          uncertainty_threshold=arguments.threshold)
 
     # run MD engine
     print("\nRunning MD engine...\n")
@@ -281,6 +281,7 @@ def parse_args():
     parser.add_argument('--nk', type=int, default='0')
     parser.add_argument('--nt', type=int, default='0')
     parser.add_argument('--nd', type=int, default='0')
+    parser.add_argument('--threshold', type=float, default = 0.1, help='uncertainty threshold for the model beyond which to compute DFT')
 
     args = parser.parse_args()
     return args

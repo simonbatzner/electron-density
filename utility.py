@@ -294,6 +294,8 @@ class MD_engine():
                 if self.check_sigma():
                     if self.verbosity == 5:
                         print("Uncertainty valid")
+
+                    n_step += 1
                     continue
 
                 # move to previous md step, compute DFT, update training set, retrain ML model
@@ -305,8 +307,9 @@ class MD_engine():
                                                 iscorrection=True, stepcount=n_step)
                     self.take_timestep(dt=-dt)
                     self.retrain_ml_model()
+                    n_step += 1
 
-            n_step += 1
+
 
     def assert_boundary_conditions(self):
         """
