@@ -226,7 +226,7 @@ def main(arguments):
     gp.original_train_ens = y_train
 
     # train model
-    print("\nFitting GP...")
+    print("\nFitting GP...\n")
     gp.fit(x_train, y_train)
 
     # build MD engine

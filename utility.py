@@ -132,7 +132,7 @@ class MD_engine():
             print("AIMD model")
             results = qe_config.run_espresso(self.atoms, self.cell, qe_config=self.espresso_config)
 
-            if self.verbosity == 4:
+            if self.verbosity > 1 :
                 print("Energy: {}".format(results['energy']))
 
             force_list = results['forces']
@@ -143,7 +143,7 @@ class MD_engine():
 
         E0 = self.get_config_energy(self.atoms)
 
-        if self.verbosity >= 4:
+        if self.verbosity > 1:
             print('\nEnergy: {}\n'.format(E0[0][0]))
 
         atoms = self.atoms
@@ -224,6 +224,10 @@ class MD_engine():
         # Superior Verlet integration, ref: https://en.wikipedia.org/wiki/Verlet_integration
         ################################################################################################################
         elif method == 'Verlet':
+
+            if self.verbosity == 5:
+                print("\n=============================================\n")
+
             for atom in self.atoms:
                 for coord in range(3):
                     # Store the current position to later store as the previous position
@@ -234,8 +238,11 @@ class MD_engine():
                                                                                                  coord] * dt ** 2 / atom.mass
                     atom.velocity[coord] += atom.force[coord] * dt / atom.mass
                     atom.prev_pos[coord] = np.copy(temp_num)
-                    if self.verbosity == 5: print("Propagated a distance of ",
+                    if self.verbosity == 5:
+                        print("Propagated a distance of ",
                                                   atom.position[coord] - atom.prev_pos[coord])
+            if self.verbosity == 5:
+                print("\n=============================================\n")
 
         if self.store_trajectory:
             for n in range(len(self.atoms)):
@@ -254,7 +261,7 @@ class MD_engine():
         if self.time == 0:
 
             if self.verbosity > 1:
-                print("\n======================================\nStep: {}".format(n_step))
+                print("\n=============================================\nStep: {}".format(n_step))
                 print("Current time: {}\n".format(self.time))
 
             # Very first timestep often doesn't have the 'previous position' to use, instead use third-order Euler method
@@ -265,12 +272,12 @@ class MD_engine():
             if (self.model == 'GP' or self.model == 'KRR') and self.uncertainty_threshold > 0:
 
                 if self.check_sigma():
-                    if self.verbosity == 5:
+                    if self.verbosity > 1:
                         print("Uncertainty valid")
 
                 # move to previous md step, compute DFT, update training set, retrain ML model
                 else:
-                    if self.verbosity == 5:
+                    if self.verbosity > 1:
                         print("Uncertainty invalid, computing DFT\n")
 
                     self.qe_config.run_espresso(self.atoms, self.cell,
@@ -283,7 +290,7 @@ class MD_engine():
         while self.time < tf:
 
             if self.verbosity > 1:
-                print("\n======================================\nStep: {}".format(n_step))
+                print("\n=============================================\nStep: {}".format(n_step))
                 print("Current time: {}\n".format(self.time))
 
             self.take_timestep(dt=dt)
@@ -292,7 +299,7 @@ class MD_engine():
             if (self.model == 'GP' or self.model == 'KRR') and self.uncertainty_threshold > 0:
 
                 if self.check_sigma():
-                    if self.verbosity == 5:
+                    if self.verbosity > 1:
                         print("Uncertainty valid")
 
                     n_step += 1
@@ -300,7 +307,7 @@ class MD_engine():
 
                 # move to previous md step, compute DFT, update training set, retrain ML model
                 else:
-                    if self.verbosity == 5:
+                    if self.verbosity > 1:
                         print("Uncertainty invalid, computing DFT\n")
 
                     self.qe_config.run_espresso(self.atoms, self.cell,
