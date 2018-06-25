@@ -8,6 +8,7 @@
         [2] http://scikit-learn.org/stable/auto_examples/gaussian_process/plot_gpr_noisy_targets.html
         [3] http://scikit-learn.org/stable/auto_examples/gaussian_process/plot_gpr_prior_posterior.html#sphx-glr-auto-examples-gaussian-process-plot-gpr-prior-posterior-py
 
+
 Simon Batzner, Steven Torrisi, Jon Vandermause
 """
 
