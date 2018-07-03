@@ -6,6 +6,7 @@ import subprocess
 import json
 import time
 import copy
+import datetime
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF
 
@@ -176,7 +177,7 @@ def parse_forces(outfile):
                            float(forceline[1]), \
                            float(forceline[2])])
 
-        return forces
+    return forces
 
 # ------------------------------------------------------
 #        molecular dynamics helper functions
@@ -402,3 +403,35 @@ def gp_pred(symm, norm_fac, gp):
     std_pred = pred[1][0] * norm_fac
     
     return force_pred, std_pred
+
+# predict force component p for a given atom
+def pred_comp(pos_curr, atom, cutoff, eta_lower, eta_upper, eta_length, brav_mat, brav_inv,\
+             vec1, vec2, vec3, p, db, gp, force_conv):
+    
+    # symmetrize chemical environment
+    symm = symmetrize_forces(pos_curr, atom, cutoff, eta_lower, eta_upper, eta_length, brav_mat, brav_inv,\
+             vec1, vec2, vec3)
+
+    symm_comp = symm[p]
+    symm_norm = np.array([symm_comp[q] / db['symm_facs'][q] for q in range(len(symm_comp))])
+
+    # estimate the force component and model error
+    norm_fac = db['force_fac']
+    force_pred, std_pred = gp_pred(symm_norm, norm_fac, gp)
+
+    # calculate error
+    err_pred = std_pred * force_conv
+
+    return force_pred, err_pred
+
+# ------------------------------------------------------
+#           Output file helper functions
+# ------------------------------------------------------
+def update_init():
+    init_text = """Welcome to PyFly Version 0.0.
+Authors: Jonathan Vandermause, Steven B. Torrisi, Simon Batzner, Alexie Kolpak, and \
+Boris Kozinsky.
+Timestamp: %s.\n \n""" % str(datetime.datetime.now())
+
+    return init_text
+
