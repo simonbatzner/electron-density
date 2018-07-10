@@ -92,8 +92,8 @@ class GaussianProcess(RegressionModel):
 
 class KernelRidgeRegression(RegressionModel):
     """KRR Regression Model"""
-    def __init__(self, training_data, training_labels, test_data, test_labels, sklearn, kernel,
-                 alpha_range, gamma_range, verbosity):
+    def __init__(self, training_data, training_labels, test_data, test_labels, kernel,
+                 alpha_range, gamma_range, cv, sklearn, verbosity):
         """
         Initialization
         """
@@ -102,9 +102,12 @@ class KernelRidgeRegression(RegressionModel):
         self.kernel = kernel
         self.verbosity=verbosity
         self.sklearn = sklearn
+        self.cv=cv
 
         if self.sklearn:
-            self.model = KernelRidge(kernel=kernel)
+            self.model =  GridSearchCV(KernelRidge(kernel=self.kernel), cv=self.cv,
+                          param_grid={"alpha": self.alpha_range,
+                                      "gamma": self.gamma_range})
 
         else:
             # PyFly implementation of Kernel Ridge Regression
@@ -113,15 +116,11 @@ class KernelRidgeRegression(RegressionModel):
         RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
                                  training_labels=training_labels, test_labels=test_labels, model_type='krr', verbosity=verbosity)
 
-    def train(self, alpha_range, gamma_range, cv):
+    def train(self):
         """
-        Train using gridsearch on KRR
+        Train ML model on training_data/ training_labels
         """
-        kr = GridSearchCV(KernelRidge(kernel=self.kernel), cv=cv,
-                          param_grid={"alpha": alpha_range,
-                                      "gamma": gamma_range})
-
-        kr.fit(self.training_data, self.training_labels)
+        super(KernelRidgeRegression, self).train()
 
     def inference(self):
         """
