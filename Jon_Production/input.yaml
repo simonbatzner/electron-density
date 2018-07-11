@@ -1,0 +1,65 @@
+structure_params:
+  alat: 5.431
+  frac_pos:
+    - ['Si', [0,0,0]]
+    - ['Si', [.25,.25,.25]]
+  lattice:
+    vectors:
+      - [0,.5,.5]
+      - [.5,0,.5]
+      - [.5,.5,1]
+  sc_dim: 3
+  pert_size: .05
+
+
+md_params:
+  frames: 50
+  noa: 51
+  step: 20
+  mass: 28.0855
+
+
+ml_params:
+  regression_model: GP
+
+  gp_params:
+    length_scale: 1
+    length_scale_min: 1e-5
+    length_scale_max: 1e5
+    threshold_params:
+      force_conv: 25.71104309541616
+      thresh_perc: .2
+    fingerprint_params:
+      eta_lower: 0
+      eta_upper: 2
+      eta_length: 10
+      cutoff: 8
+
+
+qe_params:
+  ecut: 18.0
+  nk: 4.0
+  sc_dim : 3
+  npool: 36
+  system_name: 'AIMD'
+
+  pseudo_dir : '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
+  outdir: '/n/home03/jonpvandermause/Production'
+  pw_command :  '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
+  in_file :  'scf_13.in'
+  out_file : 'scf_13.out'
+  update_name : 'update_13.txt'
+  correction_folder: ''
+  molecule: False
+
+  parallelization:
+    np: 1
+    nk: 0
+    nt: 0
+    nd: 0
+    ni: 0
+
+
+md_parallel_params:
+  processes: 360
+  par: 1
