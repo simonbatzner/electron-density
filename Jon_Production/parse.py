@@ -1,15 +1,13 @@
 import yaml
 import sys
 import os
-from mson import MSONable
 import numpy as np
 import os.path
 from utility import write_file, run_command
 import numpy.random
-## The form of the below code borrows from Pymatgen,  http://pymatgen.org/index.html
-## and their io classes. The MSONable class is borrowed from Monty: http://guide.materialsvirtuallab.org/monty/_modules/monty/json.html
 
-class md_config(dict,MSONable):
+
+class md_config(dict):
     """
     Creates an md_params object.
 
@@ -24,7 +22,7 @@ class md_config(dict,MSONable):
 
 
 
-class ml_config(dict,MSONable):
+class ml_config(dict):
     """
     Creates an ml_params object. Will probably be replaced
     as soon as we coordinate with Simon.
@@ -87,9 +85,7 @@ class structure_config(dict):
                 for pos in atom[1]:
                     pos+= numpy.random.normal(0,scale=self['pert_size'])
 
-
-
-
+        super(structure_config,self).__init__(self)
 
 
 
@@ -140,7 +136,7 @@ def setup_configs(path,verbose=True):
 
 
 
-class qe_config(dict,MSONable):
+class qe_config(dict):
 
     """
     Contains parameters which configure Quantum ESPRESSO pwscf runs,
@@ -312,6 +308,3 @@ c= structure_config(a['structure_params'])
 print(c)
 #print(c.as_dict())
 
-from oo_MD_Engine import setup_structure, Structure
-
-print(setup_structure(c))
