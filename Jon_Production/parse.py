@@ -2,12 +2,14 @@ import yaml
 import sys
 import os
 from mson import MSONable
+import numpy as np
 import os.path
 from utility import write_file, run_command
+import numpy.random
 ## The form of the below code borrows from Pymatgen,  http://pymatgen.org/index.html
 ## and their io classes. The MSONable class is borrowed from Monty: http://guide.materialsvirtuallab.org/monty/_modules/monty/json.html
 
-class md_params(MSONable):
+class md_config(dict,MSONable):
     """
     Creates an md_params object.
 
@@ -15,39 +17,82 @@ class md_params(MSONable):
         params (dict): A set of input parameters as a dictionary.
     """
     def __init__(self,params):
-        super(md_params, self).__init__()
+        super(md_config, self).__init__()
+
+        if params:
+            self.update(params)
 
 
-class qe_config(MSONable):
+
+class ml_config(dict,MSONable):
     """
-    Creates an md_params object.
+    Creates an ml_params object. Will probably be replaced
+    as soon as we coordinate with Simon.
 
     Args:
         params (dict): A set of input parameters as a dictionary.
     """
     def __init__(self,params):
-        super(qe_config, self).__init__()
 
-
-class ml_config(MSONable):
-    """
-    Creates an md_params object.
-
-    Args:
-        params (dict): A set of input parameters as a dictionary.
-    """
-    def __init__(self,params):
         super(ml_config, self).__init__()
+        if params:
+            self.update(params)
 
 
-class structure_config(MSONable):
+class structure_config(dict):
 
-    def __init__(self,params):
+    def __init__(self,params,warn=True):
+
+
+        self._params=['lattice','alat','position','frac_pos','pos','fractional',
+                      'unit_cell','pert_size','elements']
         self['lattice'] = None
-        super(structure_config, self).__init__()
+
+        if params:
+            self.update(params)
+        #super(structure_config, self).__init__()
+
+        self['elements']  = []
+        self.positions = []
+
+        check_list = {'alat': self.get('alat', False),
+            'position':self.get('frac_pos', False) or self.get('pos',False),
+            'lattice':self.get('lattice', False)}
+        if warn and not all(check_list.values()):
+            print('WARNING! Some critical parameters which are needed for structures'
+                  ' to work are not present!!')
+            for x in check_list.keys():
+                if not check_list[x]: print("Missing",x)
+            raise Exception("Malformed input file-- structure parameters incorrect.")
 
         if self['lattice']:
-            self['unit_cell']= np.array(self['lattice']['vec1'],self['lattice']['vec2'],self['lattice']['vec3'])
+            self['unit_cell']= self['alat'] * np.array([self['lattice'][0],self['lattice'][1],self['lattice'][2]])
+        if self.get('pos',False) and self.get('frac_pos',False):
+            print("Warning! Positions AND fractional positions were given--"
+                  "This is not intended use! You must select one or the other in your input.")
+            raise Exception("Fractional position AND Cartesian positions given.")
+
+        if self.get('pos',False):
+            self.fractional=False
+            self.positions = self['pos']
+        else:
+            self.fractional=True
+            self.positions = self['frac_pos']
+
+        for atom in self.positions:
+            self['elements'].append(atom[0])
+
+        if self.get('pert_size'):
+            for atom in self.positions:
+                for pos in atom[1]:
+                    pos+= numpy.random.normal(0,scale=self['pert_size'])
+
+
+
+
+
+
+
 
 
 def load_config(path,verbose=True):
@@ -87,15 +132,15 @@ def setup_configs(path,verbose=True):
     if 'ml_params' in setup_dict.keys():
         ml = ml_config(setup_dict['ml_params'])
         if ml_config['regression_model']=='GP':
-            return GaussianProcess()
+            pass
+            #ml= GaussianProcess() #TODO: integrate this with Simon's new classes
     else:
         ml = ml_config({})
 
 
 
 
-
-class qe_config(MSONable):
+class qe_config(dict,MSONable):
 
     """
     Contains parameters which configure Quantum ESPRESSO pwscf runs,
@@ -104,7 +149,8 @@ class qe_config(MSONable):
     def __init__(self, params={},warn=False):
 
         super(qe_config, self).__init__()
-
+        if params:
+            self.update(params)
         qe = self
         if not(qe.get('system_name',False)): self['system_name'] = 'QE'
         if not(qe.get('pw_command',False)): self['pw_command'] = os.environ.get('PWSCF_COMMAND')
@@ -125,10 +171,10 @@ class qe_config(MSONable):
         d["@class"] = self.__class__.__name__
         return d
 
-    @classmethod
-    def from_dict(cls, d):
-        return qe_config({k: v for k, v in d.items() if k not in ("@module",
-                                                              "@class")})
+    #@classmethod
+    #def from_dict(cls, d):
+    #    return qe_config({k: v for k, v in d.items() if k not in ("@module",
+    #                                                          "@class")})
 
     def get_correction_number(self):
         folders_in_correction_folder = list(os.walk(self.correction_folder))[0][1]
@@ -257,5 +303,15 @@ class qe_config(MSONable):
 
 
 a = load_config('input.yaml')
-print(a)
-b=qe_config(params=a['qe_params'])
+#print(a['qe_params'])
+b=qe_config(a['qe_params'],warn=True)
+#print(b)
+
+print(a['structure_params'])
+c= structure_config(a['structure_params'])
+print(c)
+#print(c.as_dict())
+
+from oo_MD_Engine import setup_structure, Structure
+
+print(setup_structure(c))
