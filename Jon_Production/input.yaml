@@ -28,20 +28,23 @@ md_params:
 
 
 ml_params:
+
   regression_model: GP
 
   gp_params:
     length_scale: 1
     length_scale_min: 1e-5
     length_scale_max: 1e5
+
     threshold_params:
       force_conv: 25.71104309541616
       thresh_perc: .2
-    fingerprint_params:
-      eta_lower: 0
-      eta_upper: 2
-      eta_length: 10
-      cutoff: 8
+
+  fingerprint_params:
+    eta_lower: 0
+    eta_upper: 2
+    eta_length: 10
+    cutoff: 8
 
 
 qe_params:
