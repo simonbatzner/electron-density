@@ -15,6 +15,7 @@ from sklearn.gaussian_process.kernels import RBF, Matern
 
 class RegressionModel:
     """Base class for regression models"""
+
     def __init__(self, model, training_data, training_labels, test_data, test_labels, model_type, verbosity):
         """
         Initialization
@@ -25,7 +26,7 @@ class RegressionModel:
         self.test_data = test_data
         self.test_labels = test_labels
         self.model_type = type
-        self.verbosity=verbosity
+        self.verbosity = verbosity
 
     def train(self):
         """
@@ -46,6 +47,7 @@ class RegressionModel:
 
 class GaussianProcess(RegressionModel):
     """Gaussian Process Regression Model"""
+
     def __init__(self, training_data, training_labels, test_data, test_labels, kernel, length_scale, length_scale_min,
                  length_scale_max, n_restarts, sklearn, verbosity):
         """
@@ -56,7 +58,7 @@ class GaussianProcess(RegressionModel):
         self.length_scale_max = length_scale_max
         self.n_restarts = n_restarts
         self.sklearn = sklearn
-        self.verbosity=verbosity
+        self.verbosity = verbosity
         self.kernel_dict = {'rbf': RBF(length_scale=self.length_scale,
                                        length_scale_bounds=(self.length_scale_min, self.length_scale_max)),
                             'matern_15': Matern(length_scale=self.length_scale,
@@ -75,7 +77,8 @@ class GaussianProcess(RegressionModel):
             self.model = VGP()
 
         RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
-                                 training_labels=training_labels, test_labels=test_labels, model_type='gp', verbosity=verbosity)
+                                 training_labels=training_labels, test_labels=test_labels, model_type='gp',
+                                 verbosity=verbosity)
 
     def train(self):
         """
@@ -92,6 +95,7 @@ class GaussianProcess(RegressionModel):
 
 class KernelRidgeRegression(RegressionModel):
     """KRR Regression Model"""
+
     def __init__(self, training_data, training_labels, test_data, test_labels, kernel,
                  alpha_range, gamma_range, cv, sklearn, verbosity):
         """
@@ -100,21 +104,22 @@ class KernelRidgeRegression(RegressionModel):
         self.alpha_range = alpha_range
         self.gamma_range = gamma_range
         self.kernel = kernel
-        self.verbosity=verbosity
+        self.verbosity = verbosity
         self.sklearn = sklearn
-        self.cv=cv
+        self.cv = cv
 
         if self.sklearn:
-            self.model =  GridSearchCV(KernelRidge(kernel=self.kernel), cv=self.cv,
-                          param_grid={"alpha": self.alpha_range,
-                                      "gamma": self.gamma_range})
+            self.model = GridSearchCV(KernelRidge(kernel=self.kernel), cv=self.cv,
+                                      param_grid={"alpha": self.alpha_range,
+                                                  "gamma": self.gamma_range})
 
         else:
             # PyFly implementation of Kernel Ridge Regression
             self.model = KRR_PF
 
         RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
-                                 training_labels=training_labels, test_labels=test_labels, model_type='krr', verbosity=verbosity)
+                                 training_labels=training_labels, test_labels=test_labels, model_type='krr',
+                                 verbosity=verbosity)
 
     def train(self):
         """
