@@ -59,6 +59,15 @@ class ml_config(dict):
 
     def __init__(self, params, print_warn=True):
 
+        super(ml_config, self).__init__()
+
+        # init with default
+        if params:
+            self.update(params)
+
+        # check if any parameters are missing
+        missing = []
+
         # default parameters for machine learning model
         default_ml = {'regression_model': 'GP',
                       'gp_params': {'length_scale': 1,
@@ -72,28 +81,18 @@ class ml_config(dict):
                                              'cutoff': 8}
                       }
 
-        # init with default
-        self.update(default_ml)
-
-        # set user params
-        self.update({k: v for k, v in params.items() if k in self.items()})
-
-        # check if any parameters are missing
-        missing = []
         flat = flatten_dict(params)
 
         for key in flatten_dict(default_ml).keys():
 
             # use random to avoid .get() returning False for input values specified as 0
             rand = np.random.rand()
+
             if flat.get(key, rand) == rand:
-                print("Missing parameter: {}".format(key))
                 missing.append(key)
 
         if print_warn and missing != []:
-            print("WARNING! Missing ML parameter, running model with default value for: {}".format(missing))
-
-        super(ml_config, self).__init__()
+            print("WARNING! Missing ML parameter, running model with default for: {}".format(missing))
 
 
 class structure_config(dict):
@@ -191,7 +190,7 @@ def setup_configs(path, verbose=True):
             # ml= GaussianProcess() #TODO: integrate this with Simon's new classes
 
     else:
-        ml = ml_config({})
+        ml = ml_config(params=setup_dict['ml_params'], print_warn=True)
 
 
 class qe_config(dict):
