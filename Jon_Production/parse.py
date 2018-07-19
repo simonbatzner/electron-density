@@ -1,10 +1,37 @@
-import yaml
 import sys
 import os
+
+import yaml
 import numpy as np
-import os.path
-from utility import write_file, run_command
 import numpy.random
+import pprint
+
+from Jon_Production.utility import write_file, run_command
+
+
+def flatten_dict(d):
+    """
+    Recursively flattens dictionary
+    :param d: dict to flatten
+    :return: flattened dict
+    """
+
+    def expand(key, value):
+        if isinstance(value, dict):
+            return [(key + '.' + k, v) for k, v in flatten_dict(value).items()]
+        else:
+            return [(key, value)]
+
+    items = [item for k, v in d.items() for item in expand(k, v)]
+
+    return dict(items)
+
+
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
 
 
 class md_config(dict):
@@ -14,67 +41,103 @@ class md_config(dict):
     Args:
         params (dict): A set of input parameters as a dictionary.
     """
-    def __init__(self,params):
+
+    def __init__(self, params):
         super(md_config, self).__init__()
 
         if params:
             self.update(params)
 
 
-
 class ml_config(dict):
     """
-    Creates an ml_params object. Will probably be replaced
-    as soon as we coordinate with Simon.
+    Creates an ml_params object.
 
     Args:
         params (dict): A set of input parameters as a dictionary.
     """
-    def __init__(self,params):
+
+    def __init__(self, params, print_warn=True):
 
         super(ml_config, self).__init__()
+
+        # init with default
         if params:
             self.update(params)
 
+        # check if any parameters are missing
+        missing = []
+
+        # default parameters for machine learning model
+        default_ml = {'regression_model': 'GP',
+                      'gp_params': {'length_scale': 1,
+                                    'length_scale_min': 1e-5,
+                                    'length_scale_max': 1e5,
+                                    'threshold_params': {'force_conv': 25.71104309541616,
+                                                         'thresh_perc': .2}},
+                      'fingerprint_params': {'eta_lower': 0,
+                                             'eta_upper': 2,
+                                             'eta_length': 10,
+                                             'cutoff': 8}
+                      }
+
+        flat = flatten_dict(params)
+
+        for key in flatten_dict(default_ml).keys():
+
+            # use random to avoid .get() returning False for input values specified as 0
+            rand = np.random.rand()
+
+            if flat.get(key, rand) == rand:
+                missing.append(key)
+
+        if print_warn and missing != []:
+            print("WARNING! Missing ML parameter, running model with default for: {}".format(missing))
+
 
 class structure_config(dict):
+    """"
+    Holds info on atomic structure
+    """
 
-    def __init__(self,params,warn=True):
+    def __init__(self, params, warn=True):
 
-
-        self._params=['lattice','alat','position','frac_pos','pos','fractional',
-                      'unit_cell','pert_size','elements']
+        self._params = ['lattice', 'alat', 'position', 'frac_pos', 'pos', 'fractional',
+                        'unit_cell', 'pert_size', 'elements']
         self['lattice'] = None
 
         if params:
             self.update(params)
-        #super(structure_config, self).__init__()
+        # super(structure_config, self).__init__()
 
-        self['elements']  = []
+        self['elements'] = []
         self.positions = []
 
         check_list = {'alat': self.get('alat', False),
-            'position':self.get('frac_pos', False) or self.get('pos',False),
-            'lattice':self.get('lattice', False)}
+                      'position': self.get('frac_pos', False) or self.get('pos', False),
+                      'lattice': self.get('lattice', False)}
+
         if warn and not all(check_list.values()):
             print('WARNING! Some critical parameters which are needed for structures'
                   ' to work are not present!!')
             for x in check_list.keys():
-                if not check_list[x]: print("Missing",x)
+                if not check_list[x]: print("Missing", x)
             raise Exception("Malformed input file-- structure parameters incorrect.")
 
         if self['lattice']:
-            self['unit_cell']= self['alat'] * np.array([self['lattice'][0],self['lattice'][1],self['lattice'][2]])
-        if self.get('pos',False) and self.get('frac_pos',False):
+            self['unit_cell'] = self['alat'] * np.array([self['lattice'][0], self['lattice'][1], self['lattice'][2]])
+
+        if self.get('pos', False) and self.get('frac_pos', False):
             print("Warning! Positions AND fractional positions were given--"
                   "This is not intended use! You must select one or the other in your input.")
             raise Exception("Fractional position AND Cartesian positions given.")
 
-        if self.get('pos',False):
-            self.fractional=False
+        if self.get('pos', False):
+            self.fractional = False
             self.positions = self['pos']
+
         else:
-            self.fractional=True
+            self.fractional = True
             self.positions = self['frac_pos']
 
         for atom in self.positions:
@@ -83,16 +146,12 @@ class structure_config(dict):
         if self.get('pert_size'):
             for atom in self.positions:
                 for pos in atom[1]:
-                    pos+= numpy.random.normal(0,scale=self['pert_size'])
+                    pos += numpy.random.normal(0, scale=self['pert_size'])
 
-        super(structure_config,self).__init__(self)
-
-
+        super(structure_config, self).__init__(self)
 
 
-
-def load_config(path,verbose=True):
-
+def load_config(path, verbose=True):
     if not os.path.isfile(path) and verbose:
         raise OSError('Configuration file does not exist.')
 
@@ -102,20 +161,18 @@ def load_config(path,verbose=True):
         except yaml.YAMLError as exc:
             print(exc)
 
-
     return out
 
-def setup_configs(path,verbose=True):
 
+def setup_configs(path, verbose=True):
     setup_dict = load_config(path, verbose=verbose)
 
-
     if 'md_params' in setup_dict.keys():
-        md= md_params.from_dict(setup_dict['md_params'])
+        md = md_params.from_dict(setup_dict['md_params'])
     else:
         md = md_params.from_dict({})
 
-    if  'qe_params' in setup_dict.keys():
+    if 'qe_params' in setup_dict.keys():
         qe = qe_config.from_dict(setup_dict['qe_params'])
     else:
         qe = qe_config.from_dict({})
@@ -127,30 +184,33 @@ def setup_configs(path,verbose=True):
 
     if 'ml_params' in setup_dict.keys():
         ml = ml_config(setup_dict['ml_params'])
-        if ml_config['regression_model']=='GP':
+
+        if ml_config['regression_model'] == 'GP':
             pass
-            #ml= GaussianProcess() #TODO: integrate this with Simon's new classes
+            # ml= GaussianProcess() #TODO: integrate this with Simon's new classes
+
     else:
-        ml = ml_config({})
-
-
+        ml = ml_config(params=setup_dict['ml_params'], print_warn=True)
 
 
 class qe_config(dict):
-
     """
     Contains parameters which configure Quantum ESPRESSO pwscf runs,
     as well as the methods to implement them.
     """
-    def __init__(self, params={},warn=False):
+
+    def __init__(self, params={}, warn=False):
 
         super(qe_config, self).__init__()
+
         if params:
             self.update(params)
         qe = self
-        if not(qe.get('system_name',False)): self['system_name'] = 'QE'
-        if not(qe.get('pw_command',False)): self['pw_command'] = os.environ.get('PWSCF_COMMAND')
-        if not(qe.get('parallelization',False)): self['parallelization'] = {'np':1,'nk':0,'nt':0,'nd':0,'ni':0}
+
+        if not (qe.get('system_name', False)): self['system_name'] = 'QE'
+        if not (qe.get('pw_command', False)): self['pw_command'] = os.environ.get('PWSCF_COMMAND')
+        if not (qe.get('parallelization', False)): self['parallelization'] = {'np': 1, 'nk': 0, 'nt': 0, 'nd': 0,
+                                                                              'ni': 0}
 
         if warn and not all([
             qe.get('ecut', False),
@@ -167,12 +227,13 @@ class qe_config(dict):
         d["@class"] = self.__class__.__name__
         return d
 
-    #@classmethod
-    #def from_dict(cls, d):
+    # @classmethod
+    # def from_dict(cls, d):
     #    return qe_config({k: v for k, v in d.items() if k not in ("@module",
     #                                                          "@class")})
 
     def get_correction_number(self):
+
         folders_in_correction_folder = list(os.walk(self.correction_folder))[0][1]
 
         steps = [fold for fold in folders_in_correction_folder if self.system_name + "_step_" in fold]
@@ -180,14 +241,17 @@ class qe_config(dict):
         if len(steps) >= 1:
             stepvals = [int(fold.split('_')[-1]) for fold in steps]
             correction_number = max(stepvals)
+
         else:
             return 0
+
         return correction_number + 1
 
-    def run_espresso(self, atoms, cell, iscorrection = False):
+    def run_espresso(self, atoms, cell, iscorrection=False):
 
         pseudopots = {}
         elements = [atom.element for atom in atoms]
+
         for element in elements:
             pseudopots[element] = self.pseudopotentials[element]
 
@@ -200,6 +264,7 @@ class qe_config(dict):
 
         if self.molecule:
             kpts = Kpoints(gridsize=[1, 1, 1], option='gamma', offset=False)
+
         else:
             nk = self.nk
             kpts = Kpoints(gridsize=[nk, nk, nk], option='automatic', offset=False)
@@ -208,9 +273,12 @@ class qe_config(dict):
             self.correction_number = self.get_correction_number()
             # print("rolling with correction number",qe_config.correction_number)
             dirname = self.system_name + '_step_' + str(self.correction_number)
+
         else:
             dirname = 'temprun'
+
         runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "AIMD", dirname))
+
         input_params = PWscf_inparam({
             'CONTROL': {
                 'prefix': self.system_name,
@@ -288,7 +356,7 @@ class qe_config(dict):
                        self['nat'], self['ecut'], self['cell'], self['pos'], self['nk'])
         return scf_text
 
-    def run_scf_from_text(self,scf_text, npool, out_file='pw.out', in_file='pw.in'):
+    def run_scf_from_text(self, scf_text, npool, out_file='pw.out', in_file='pw.in'):
 
         # write input file
         write_file(in_file, scf_text)
@@ -298,13 +366,22 @@ class qe_config(dict):
         run_command(qe_command)
 
 
-a = load_config('input.yaml')
-#print(a['qe_params'])
-b=qe_config(a['qe_params'],warn=True)
-#print(b)
+def main():
+    # load from config file
+    config = load_config('input.yaml')
+    print(config)
 
-print(a['structure_params'])
-c= structure_config(a['structure_params'])
-print(c)
-#print(c.as_dict())
+    # # set configs
+    # qe_fig = qe_config(config['qe_params'], warn=True)
+    # print(qe_fig)
 
+    # struc_fig = structure_config(config['structure_params'])
+    # print(struc_fig)
+    # print(struc_fig._params)
+
+    ml_fig = ml_config(params=config['ml_params'], print_warn=True)
+    print(ml_fig)
+
+
+if __name__ == '__main__':
+    main()
