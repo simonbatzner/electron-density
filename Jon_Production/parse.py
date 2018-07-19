@@ -27,6 +27,13 @@ def flatten_dict(d):
     return dict(items)
 
 
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+
 class md_config(dict):
     """
     Creates an md_params object.
@@ -52,8 +59,6 @@ class ml_config(dict):
 
     def __init__(self, params, print_warn=True):
 
-        super(ml_config, self).__init__()
-
         # default parameters for machine learning model
         default_ml = {'regression_model': 'GP',
                       'gp_params': {'length_scale': 1,
@@ -70,9 +75,8 @@ class ml_config(dict):
         # init with default
         self.update(default_ml)
 
-        # set user parameters
-        if params:
-            self.update(params)
+        # set user params
+        self.update({k: v for k, v in params.items() if k in self.items()})
 
         # check if any parameters are missing
         missing = []
@@ -88,6 +92,8 @@ class ml_config(dict):
 
         if print_warn and missing != []:
             print("WARNING! Missing ML parameter, running model with default value for: {}".format(missing))
+
+        super(ml_config, self).__init__()
 
 
 class structure_config(dict):
@@ -372,6 +378,7 @@ def main():
 
     # struc_fig = structure_config(config['structure_params'])
     # print(struc_fig)
+    # print(struc_fig._params)
 
     ml_fig = ml_config(params=config['ml_params'], print_warn=True)
     print(ml_fig)
