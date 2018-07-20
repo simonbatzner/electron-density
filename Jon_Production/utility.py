@@ -415,7 +415,7 @@ def pred_comp(pos_curr, atom, cutoff, eta_lower, eta_upper, eta_length, brav_mat
     symm_comp = symm[p]
     symm_norm = np.array([symm_comp[q] / db['symm_facs'][q] for q in range(len(symm_comp))])
 
-    # estimate the force component and model error
+    # estimate the force component and model errors
     norm_fac = db['force_fac']
     force_pred, std_pred = gp_pred(symm_norm, norm_fac, gp)
 

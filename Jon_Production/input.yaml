@@ -55,12 +55,12 @@ qe_params:
   system_name: 'AIMD'
 
   pseudo_dir : '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
-  outdir: '/n/home03/jonpvandermause/Production'
+  outdir: '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/Jon_Production/outtest'
   pw_command :  '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
   in_file :  'scf_13.in'
   out_file : 'scf_13.out'
   update_name : 'update_13.txt'
-  correction_folder: ''
+  correction_folder: '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/Jon_Production/'
   molecule: False
 
   parallelization:

@@ -6,6 +6,8 @@ import numpy as np
 import numpy.random
 import pprint
 
+from ase import Atoms
+
 from Jon_Production.utility import write_file, run_command
 
 
@@ -52,12 +54,14 @@ class md_config(dict):
 class ml_config(dict):
     """
     Creates an ml_params object.
-
-    Args:
-        params (dict): A set of input parameters as a dictionary.
     """
 
     def __init__(self, params, print_warn=True):
+        """
+        Init
+        :param params:      dict, input dictionary to init from
+        :param print_warn:  boolean, whether to print warning if certain parameters are missing
+        """
 
         super(ml_config, self).__init__()
 
@@ -96,11 +100,16 @@ class ml_config(dict):
 
 
 class structure_config(dict):
-    """"
+    """
     Holds info on atomic structure
     """
 
     def __init__(self, params, warn=True):
+        """
+        Init
+        :param params:  dict, input dictionary to init from
+        :param warn:    boolean, whether to print warning if certain parameters are missing
+        """
 
         self._params = ['lattice', 'alat', 'position', 'frac_pos', 'pos', 'fractional',
                         'unit_cell', 'pert_size', 'elements']
@@ -108,6 +117,7 @@ class structure_config(dict):
 
         if params:
             self.update(params)
+
         # super(structure_config, self).__init__()
 
         self['elements'] = []
@@ -118,10 +128,13 @@ class structure_config(dict):
                       'lattice': self.get('lattice', False)}
 
         if warn and not all(check_list.values()):
+
             print('WARNING! Some critical parameters which are needed for structures'
                   ' to work are not present!!')
+
             for x in check_list.keys():
                 if not check_list[x]: print("Missing", x)
+
             raise Exception("Malformed input file-- structure parameters incorrect.")
 
         if self['lattice']:
@@ -130,6 +143,7 @@ class structure_config(dict):
         if self.get('pos', False) and self.get('frac_pos', False):
             print("Warning! Positions AND fractional positions were given--"
                   "This is not intended use! You must select one or the other in your input.")
+
             raise Exception("Fractional position AND Cartesian positions given.")
 
         if self.get('pos', False):
@@ -152,6 +166,13 @@ class structure_config(dict):
 
 
 def load_config(path, verbose=True):
+    """
+    Load parameters from input.yaml
+    :param path:        str, path of configuration file
+    :param verbose:     boolean, verbosity
+    :return:            dict, configuration parameters
+    """
+
     if not os.path.isfile(path) and verbose:
         raise OSError('Configuration file does not exist.')
 
@@ -165,12 +186,19 @@ def load_config(path, verbose=True):
 
 
 def setup_configs(path, verbose=True):
+    """
+    Set subconfigurations from input.yaml
+    :param path:        str, path of configuration file
+    :param verbose:     boolean, verbosity
+    :return:
+    """
+
     setup_dict = load_config(path, verbose=verbose)
 
-    if 'md_params' in setup_dict.keys():
-        md = md_params.from_dict(setup_dict['md_params'])
-    else:
-        md = md_params.from_dict({})
+    # if 'md_params' in setup_dict.keys():
+    #     md = md_params.from_dict(setup_dict['md_params'])
+    # else:
+    #     md = md_params.from_dict({})
 
     if 'qe_params' in setup_dict.keys():
         qe = qe_config.from_dict(setup_dict['qe_params'])
@@ -200,13 +228,21 @@ class qe_config(dict):
     """
 
     def __init__(self, params={}, warn=False):
-
+        """
+        Init
+        :param params:  dict, input dictionary to init from
+        :param warn:    boolean, whether or not to print warning if params are missing
+        """
         super(qe_config, self).__init__()
 
+        # init
         if params:
             self.update(params)
-        qe = self
 
+        qe = self
+        self.correction_folder = self.get('correction_folder')
+
+        # check for missing params
         if not (qe.get('system_name', False)): self['system_name'] = 'QE'
         if not (qe.get('pw_command', False)): self['pw_command'] = os.environ.get('PWSCF_COMMAND')
         if not (qe.get('parallelization', False)): self['parallelization'] = {'np': 1, 'nk': 0, 'nt': 0, 'nd': 0,
@@ -234,13 +270,16 @@ class qe_config(dict):
 
     def get_correction_number(self):
 
-        folders_in_correction_folder = list(os.walk(self.correction_folder))[0][1]
+        walk_result = list(os.walk(self.correction_folder))
+        folders_in_correction_folder = walk_result[0][1]
+
 
         steps = [fold for fold in folders_in_correction_folder if self.system_name + "_step_" in fold]
 
         if len(steps) >= 1:
             stepvals = [int(fold.split('_')[-1]) for fold in steps]
             correction_number = max(stepvals)
+            print(correction_number)
 
         else:
             return 0
@@ -248,7 +287,13 @@ class qe_config(dict):
         return correction_number + 1
 
     def run_espresso(self, atoms, cell, iscorrection=False):
-
+        """
+        Run Quantum Espresso
+        :param atoms:
+        :param cell:
+        :param iscorrection:
+        :return:
+        """
         pseudopots = {}
         elements = [atom.element for atom in atoms]
 
@@ -270,8 +315,10 @@ class qe_config(dict):
             kpts = Kpoints(gridsize=[nk, nk, nk], option='automatic', offset=False)
 
         if iscorrection:
+
             self.correction_number = self.get_correction_number()
-            # print("rolling with correction number",qe_config.correction_number)
+
+            print("rolling with correction number", qe_config.correction_number)
             dirname = self.system_name + '_step_' + str(self.correction_number)
 
         else:
@@ -285,7 +332,7 @@ class qe_config(dict):
                 'calculation': 'scf',
                 'pseudo_dir': os.environ['ESPRESSO_PSEUDO'],
                 'outdir': runpath.path,
-                #            'wfcdir': runpath.path,
+                # 'wfcdir': runpath.path,
                 'disk_io': 'low',
                 'tprnfor': True,
                 'wf_collect': False
@@ -293,7 +340,7 @@ class qe_config(dict):
             'SYSTEM': {
                 'ecutwfc': self.ecut,
                 'ecutrho': self.ecut * 8,
-                #           'nspin': 4 if 'rel' in potname else 1,
+                # 'nspin': 4 if 'rel' in potname else 1,
 
                 'occupations': 'smearing',
                 'smearing': 'mp',
@@ -325,8 +372,9 @@ class qe_config(dict):
 
     def create_scf_input(self):
         """
-        Jon V's version of the PWSCF formatter.
-        Works entirely based on internal settings.
+        Create QE SCF input file
+
+        :return     str, input text for QE
         """
 
         scf_text = """ &control
@@ -357,7 +405,14 @@ class qe_config(dict):
         return scf_text
 
     def run_scf_from_text(self, scf_text, npool, out_file='pw.out', in_file='pw.in'):
-
+        """
+        Write QE input and run QE SCF from scf text file
+        :param scf_text:
+        :param npool:
+        :param out_file:
+        :param in_file:
+        :return:
+        """
         # write input file
         write_file(in_file, scf_text)
 
@@ -369,18 +424,20 @@ class qe_config(dict):
 def main():
     # load from config file
     config = load_config('input.yaml')
-    print(config)
+    print(type(config))
 
-    # # set configs
-    # qe_fig = qe_config(config['qe_params'], warn=True)
-    # print(qe_fig)
+    # set configs
+    pprint.pprint(config['qe_params'])
+    qe_fig = qe_config(config['qe_params'], warn=True)
+    pprint.pprint(qe_fig)
+    print(qe_fig.get_correction_number())
 
     # struc_fig = structure_config(config['structure_params'])
     # print(struc_fig)
     # print(struc_fig._params)
 
-    ml_fig = ml_config(params=config['ml_params'], print_warn=True)
-    print(ml_fig)
+    # ml_fig = ml_config(params=config['ml_params'], print_warn=True)
+    # print(ml_fig)
 
 
 if __name__ == '__main__':
