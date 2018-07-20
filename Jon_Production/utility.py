@@ -508,7 +508,7 @@ def pred_comp(pos_curr, atom, cutoff, eta_lower, eta_upper, eta_length, brav_mat
 
 
 # ------------------------------------------------------
-#           Gaussian Process helper functions
+#        Homemade Gaussian Process helper functions
 # ------------------------------------------------------
 
 def SE_cov(x1, x2, sig, ls):
