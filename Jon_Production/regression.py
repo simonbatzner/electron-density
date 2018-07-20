@@ -5,6 +5,7 @@
 """" Regression models
 Simon Batzner
 """
+import os
 
 import numpy as np
 
@@ -18,10 +19,28 @@ from sklearn.gaussian_process.kernels import RBF, Matern
 from Jon_Production.utility import get_SE_K, GP_SE_alpha, minus_like_hyp, GP_SE_pred
 
 
+def get_files(root_dir):
+    """
+    Find all files matching *.out
+
+    :param root_dir:    str, dir to walk from
+    :return:            list, files in root_dir ending with .out
+    """
+    matching = []
+
+    for root, dirnames, filenames in os.walk(root_dir):
+        for filename in filenames:
+            if filename.endswith(('.out')):
+                matching.append(os.path.join(root, filename))
+
+    return matching
+
+
 class RegressionModel:
     """Base class for regression models"""
 
-    def __init__(self, model, training_data, training_labels, test_data, test_labels, model_type, verbosity):
+    def __init__(self, model, training_data, training_labels, test_data, test_labels, correction_folder, model_type,
+                 verbosity):
         """
         Initialization
         """
@@ -32,6 +51,17 @@ class RegressionModel:
         self.test_labels = test_labels
         self.model_type = model_type
         self.verbosity = verbosity
+        self.correction_folder = correction_folder
+        self.aug_files = []
+
+    def upd_database(self):
+        """
+        Add new training data from augmentation folder
+        :return:
+        """
+        for file in get_files(self.correction_folder):
+            if file not in self.aug_files:
+                self.aug_files.append(file)
 
 
 class GaussianProcess(RegressionModel):
@@ -39,7 +69,7 @@ class GaussianProcess(RegressionModel):
 
     def __init__(self, training_data=None, training_labels=None, test_data=None, test_labels=None, kernel='rbf',
                  length_scale=1, length_scale_min=1e-5, length_scale_max=1e5, sigma=1, n_restarts=10,
-                 verbosity=1, sklearn=False):
+                 correction_folder='.', verbosity=1, sklearn=False):
         """
         Initialization
         """
@@ -78,8 +108,15 @@ class GaussianProcess(RegressionModel):
             self.alpha = None
 
         RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
-                                 training_labels=training_labels, test_labels=test_labels, model_type='gp',
-                                 verbosity=verbosity)
+                                 training_labels=training_labels, test_labels=test_labels,
+                                 correction_folder=correction_folder, model_type='gp', verbosity=verbosity)
+
+    def retrain(self):
+        """
+        Retrain GP model in active learning procedure based on new training data
+        """
+        self.upd_database()
+        self.train()
 
     def opt_hyper(self):
         """
