@@ -1,4 +1,12 @@
-import sys
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# pylint: disable=line-too-long, invalid-name, too-many-arguments
+
+"""" Input parser
+
+Steven Torrisi, Simon Batzner
+"""
+
 import os
 
 import yaml
@@ -273,7 +281,6 @@ class qe_config(dict):
         walk_result = list(os.walk(self.correction_folder))
         folders_in_correction_folder = walk_result[0][1]
 
-
         steps = [fold for fold in folders_in_correction_folder if self.system_name + "_step_" in fold]
 
         if len(steps) >= 1:
@@ -318,7 +325,7 @@ class qe_config(dict):
 
             self.correction_number = self.get_correction_number()
 
-            print("rolling with correction number", qe_config.correction_number)
+            # print("rolling with correction number", qe_config.correction_number)
             dirname = self.system_name + '_step_' + str(self.correction_number)
 
         else:
@@ -407,11 +414,6 @@ class qe_config(dict):
     def run_scf_from_text(self, scf_text, npool, out_file='pw.out', in_file='pw.in'):
         """
         Write QE input and run QE SCF from scf text file
-        :param scf_text:
-        :param npool:
-        :param out_file:
-        :param in_file:
-        :return:
         """
         # write input file
         write_file(in_file, scf_text)
@@ -422,6 +424,7 @@ class qe_config(dict):
 
 
 def main():
+
     # load from config file
     config = load_config('input.yaml')
     print(type(config))
@@ -431,13 +434,6 @@ def main():
     qe_fig = qe_config(config['qe_params'], warn=True)
     pprint.pprint(qe_fig)
     print(qe_fig.get_correction_number())
-
-    # struc_fig = structure_config(config['structure_params'])
-    # print(struc_fig)
-    # print(struc_fig._params)
-
-    # ml_fig = ml_config(params=config['ml_params'], print_warn=True)
-    # print(ml_fig)
 
 
 if __name__ == '__main__':

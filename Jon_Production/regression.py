@@ -3,6 +3,7 @@
 # pylint: disable=line-too-long, invalid-name, too-many-arguments
 
 """" Regression models
+
 Simon Batzner
 """
 import os
@@ -17,6 +18,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.gaussian_process.kernels import RBF, Matern
 
 from Jon_Production.utility import get_SE_K, GP_SE_alpha, minus_like_hyp, GP_SE_pred
+from util.project_pwscf import parse_qe_pwscf_output
 
 
 def get_files(root_dir):
@@ -30,7 +32,7 @@ def get_files(root_dir):
 
     for root, dirnames, filenames in os.walk(root_dir):
         for filename in filenames:
-            if filename.endswith(('.out')):
+            if filename.endswith('.out'):
                 matching.append(os.path.join(root, filename))
 
     return matching
@@ -39,20 +41,41 @@ def get_files(root_dir):
 class RegressionModel:
     """Base class for regression models"""
 
-    def __init__(self, model, training_data, training_labels, test_data, test_labels, correction_folder, model_type,
-                 verbosity):
+    def __init__(self, model, training_data, training_labels, test_data, test_labels, correction_folder,
+                 training_folder, model_type, target, verbosity):
         """
         Initialization
         """
         self.model = model
+        self.target = target
         self.training_data = training_data
         self.training_labels = training_labels
         self.test_data = test_data
         self.test_labels = test_labels
         self.model_type = model_type
         self.verbosity = verbosity
+        self.training_folder = training_folder
         self.correction_folder = correction_folder
         self.aug_files = []
+
+    def parse_output(self, filename):
+        """
+        Parse QE output file and return new datapoint as input_data, target
+        :param filename:            str, QE file to read from
+        :return: [data, target]     input config and target for ML model from QE output file
+        """
+        result = parse_qe_pwscf_output(filename)
+
+        if self.target == 'f':
+            data, labels = [], []
+
+        elif self.target == 'e':
+            data, labels = [], []
+
+        else:
+            raise ValueError("No proper ML target defined.")
+
+        return data, labels
 
     def upd_database(self):
         """
@@ -63,13 +86,32 @@ class RegressionModel:
             if file not in self.aug_files:
                 self.aug_files.append(file)
 
+                data, labels = self.parse_output(file)
+
+                for d, l in zip(data, labels):
+                    self.training_data.append(d)
+                    self.training_labels.append(l)
+
+    def init_database(self):
+        """
+        Init training database from directory
+        :return:
+        """
+        for file in get_files(self.training_folder):
+
+            data, labels = self.parse_output(file)
+
+            for d, l in zip(data, labels):
+                self.training_data.append(d)
+                self.training_labels.append(l)
+
 
 class GaussianProcess(RegressionModel):
     """Gaussian Process Regression Model"""
 
     def __init__(self, training_data=None, training_labels=None, test_data=None, test_labels=None, kernel='rbf',
                  length_scale=1, length_scale_min=1e-5, length_scale_max=1e5, sigma=1, n_restarts=10,
-                 correction_folder='.', verbosity=1, sklearn=False):
+                 correction_folder='.', training_folder='.', target='f', verbosity=1, sklearn=False):
         """
         Initialization
         """
@@ -109,7 +151,8 @@ class GaussianProcess(RegressionModel):
 
         RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
                                  training_labels=training_labels, test_labels=test_labels,
-                                 correction_folder=correction_folder, model_type='gp', verbosity=verbosity)
+                                 correction_folder=correction_folder, training_folder=training_folder,
+                                 model_type='gp', target='f', verbosity=verbosity)
 
     def retrain(self):
         """
@@ -168,7 +211,7 @@ class KernelRidgeRegression(RegressionModel):
     """KRR Regression Model"""
 
     def __init__(self, training_data, training_labels, test_data, test_labels, kernel,
-                 alpha_range, gamma_range, cv, sklearn, verbosity):
+                 alpha_range, gamma_range, cv, correction_folder, sklearn, verbosity):
         """
         Initialization
         """
@@ -189,8 +232,8 @@ class KernelRidgeRegression(RegressionModel):
             pass
 
         RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
-                                 training_labels=training_labels, test_labels=test_labels, model_type='krr',
-                                 verbosity=verbosity)
+                                 training_labels=training_labels, test_labels=test_labels,
+                                 correction_folder=correction_folder, model_type='krr', verbosity=verbosity)
 
     def train(self):
         """
