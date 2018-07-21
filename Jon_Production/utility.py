@@ -61,6 +61,7 @@ def perturb_struc(positions, pert_size):
 
     # loop through positions and add a random perturbation
     for n in range(len(positions)):
+
         for m in range(3):
             # get current coordinate
             coord_curr = positions[n][1][m]
@@ -79,17 +80,21 @@ def get_position_txt(positions, supercell):
     Put supercell positions and cell parameters in QE friendly format
     Based on Boris K's AP275 code
     """
+
     # write atomic positions
     postxt = ''
     postxt += 'ATOMIC_POSITIONS {angstrom}'
+
     for pos in positions:
         postxt += '\n {} {:1.5f} {:1.5f} {:1.5f}'.format(pos[0], *pos[1])
 
     # write cell parameters
     celltxt = ''
     celltxt += 'CELL_PARAMETERS {angstrom}'
+
     for vector in supercell:
         celltxt += '\n {:1.5f} {:1.5f} {:1.5f}'.format(*vector)
+
     return postxt, celltxt
 
 
@@ -113,6 +118,7 @@ def add_label(pos, pos_label):
     Add atom labels to position array
     """
     lab = []
+
     for n in range(len(pos)):
         lab.append([pos_label[n][0], pos[n]])
 
@@ -162,8 +168,7 @@ ATOMIC_SPECIES
 {5}
 K_POINTS automatic
  {6} {6} {6}  0 0 0
-    """.format(pseudo_dir, outdir, \
-               nat, ecut, cell, pos, nk)
+    """.format(pseudo_dir, outdir, nat, ecut, cell, pos, nk)
 
     return scf_text
 
@@ -186,6 +191,7 @@ def parse_forces(outfile):
     Get forces in Ry/a.u.
     Based on Steven T's MD parser
     """
+
     # get lines
     with open(outfile, 'r') as outf:
         lines = outf.readlines()
@@ -198,12 +204,14 @@ def parse_forces(outfile):
 
     # carve the rest into chunks
     step_chunks = []
+
     for n in range(len(split_indexes)):
         step_chunks.append(lines[split_indexes[n]:split_indexes[n + 1] \
             if n != len(split_indexes) - 1 else len(lines)])
 
     # loop through the chunks
     for current_chunk in step_chunks:
+
         # get force indices
         force_start_line = [line for line in current_chunk if 'Forces acting on atoms' in line][0]
         force_end_line = [line for line in current_chunk if 'Total force' in line][0]
@@ -212,6 +220,7 @@ def parse_forces(outfile):
 
         # record forces
         forces = []
+
         for line in current_chunk[force_start_index:force_end_index + 1]:
             forceline = line.split('=')[-1].split()
             forces.append([float(forceline[0]), \
@@ -322,6 +331,7 @@ def symmetrize_forces(pos, atom, cutoff, eta_lower, eta_upper, eta_length, brav_
 
     # loop through positions to find all atoms and images in the neighborhood
     for n in range(len(pos)):
+        
         # note that images of the atom don't contribute to symmetry vectors
         if n != atom:
             # position relative to reference atom

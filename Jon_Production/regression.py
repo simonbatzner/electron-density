@@ -17,7 +17,7 @@ from sklearn.kernel_ridge import KernelRidge
 from sklearn.model_selection import GridSearchCV
 from sklearn.gaussian_process.kernels import RBF, Matern
 
-from Jon_Production.utility import get_SE_K, GP_SE_alpha, minus_like_hyp, GP_SE_pred
+from Jon_Production.utility import get_SE_K, GP_SE_alpha, minus_like_hyp, GP_SE_pred, aug_and_norm
 from util.project_pwscf import parse_qe_pwscf_output
 
 
@@ -67,10 +67,13 @@ class RegressionModel:
         result = parse_qe_pwscf_output(filename)
 
         if self.target == 'f':
-            data, labels = [], []
+            labels, data = result['forces'], result['positions']
 
         elif self.target == 'e':
-            data, labels = [], []
+            raise ValueError("Not implemented yet. Stay tuned.")
+
+        elif self.target == 'fe':
+            raise ValueError("Not implemented yet. Stay tuned.")
 
         else:
             raise ValueError("No proper ML target defined.")
@@ -80,7 +83,6 @@ class RegressionModel:
     def upd_database(self):
         """
         Add new training data from augmentation folder
-        :return:
         """
         for file in get_files(self.correction_folder):
             if file not in self.aug_files:
@@ -92,10 +94,11 @@ class RegressionModel:
                     self.training_data.append(d)
                     self.training_labels.append(l)
 
+                    # TODO: normalize database
+
     def init_database(self):
         """
         Init training database from directory
-        :return:
         """
         for file in get_files(self.training_folder):
 
@@ -211,7 +214,7 @@ class KernelRidgeRegression(RegressionModel):
     """KRR Regression Model"""
 
     def __init__(self, training_data, training_labels, test_data, test_labels, kernel,
-                 alpha_range, gamma_range, cv, correction_folder, sklearn, verbosity):
+                 alpha_range, gamma_range, cv, correction_folder, training_folder, sklearn, verbosity):
         """
         Initialization
         """
@@ -233,7 +236,8 @@ class KernelRidgeRegression(RegressionModel):
 
         RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
                                  training_labels=training_labels, test_labels=test_labels,
-                                 correction_folder=correction_folder, model_type='krr', verbosity=verbosity)
+                                 correction_folder=correction_folder, training_folder=training_folder,
+                                 model_type='krr', target='f', verbosity=verbosity)
 
     def train(self):
         """
