@@ -7,147 +7,13 @@ import numpy.random as rand
 import numpy.linalg as la
 from sklearn.kernel_ridge import KernelRidge
 
-
-class Atom():
-    def __init__(self, position=(0., 0., 0.), velocity=(0., 0., 0.), force=(0., 0., 0.), initial_pos=(0, 0, 0),
-                 mass=None, element='', constraint=(False, False, False)):
-
-        self.position = np.array(position)
-        self.velocity = np.array(velocity)
-        self.force = np.array(force)
-        self.element = str(element)
-
-        # Used in Verlet integration
-        self.prev_pos = np.array(self.position)
-        self.initial_pos = self.position if self.position!=(0,0,0) else initial_pos
-        # Boolean which signals if the coordinates are fractional in their original cell
-        self.constraint = list(constraint)
-        self.fingerprint = rand.rand()  # This is how I tell atoms apart. Easier than indexing them manually...
-
-        if self.element in self.mass_dict.keys() and mass == None:
-            self.mass = self.mass_dict[self.element]
-        else:
-            self.mass = mass or 1.0
-
-        ## Used for testing with a simple harmonic oscillator potential
-        ## in which the force is merely the displacement squared from initial position
-        self.initial_pos = np.array(initial_pos)
-
-        self.parameters = {'position': self.position,
-                           'velocity': self.velocity,
-                           'force': self.force,
-                           'mass': self.mass,
-                           'element': self.element,
-                           'constraint': self.constraint,
-                           'initial_pos': self.initial_pos,
-                           'fractional coordinate:': self.fractional}
-
-    # Pint the
-    def __str__(self):
-        return str(self.parameters)
-
-    def get_position(self):
-        return self.position
-
-    def get_velocity(self):
-        return self.velocity
-
-    def get_force(self):
-        return self.force
-
-    def apply_constraint(self):
-        for n in range(3):
-            if self.constraint[n]:
-                self.velocity[n] = 0.
-                self.force[n] = 0.
+from utility import first_derivative_2nd, first_derivative_4th
+from utility import
+mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855,'O':15.9994}
 
 
-
-
-
-
-
-
-class Structure(list):
-    """
-    Class which stores list of atoms as well as information on the structure,
-    which is acted upon by the MD engine.
-    Parameterized by the structure_params object in the YAML input files.
-
-    args:
-    alat (float): Scaling factor for the lattice
-    cell (3x3 nparray): Matrix of vectors which define the unit cell
-    elements (list [str]): Names of elements in the system
-    atom_list (list [Atom]): Atom objects which are propagated by the MD Engine
-    """
-    mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855}
-
-    def __init__(self, alat=1.,lattice=np.eye(3),elements=None, atom_list=None,fractional=True):
-
-        self.atom_list = [] or atom_list
-        self.elements = [] or set(elements)
-        self.alat = alat
-
-        if np.shape(lattice)!=(3,3):
-            print("WARNING! Inappropriately shaped cell passed as input to structure!")
-            raise Exception(np.shape(lattice))
-
-        self.lattice = lattice
-        self.fractional = fractional
-
-        super(Structure, self).__init__(self.atom_list)
-
-
-    def print_atoms(self,fractional=True):
-
-        fractional = self.fractional
-
-        if fractional:
-            for n, at in enumerate(self.atom_list):
-                print("{}:{} ({},{},{}) ".format(n, at.element, at.position[0], at.position[1], at.position[2]))
-        else:
-            for n, at in enumerate(self.atom_list):
-                print("{}:{} ({},{},{}) ".format(n, at.element, at.position[0], at.position[1], at.position[2]))
-
-    def __str__(self):
-        self.print_atoms()
-
-    def get_positions(self):
-        return [at.position for at in self.atom_list]
-    def set_forces(self,forces,):
-        """
-        Sets forces
-        :param forces: List of length of atoms in system of length-3 force components
-        :return:
-        """
-        if len(self.atom_list)!=len(forces):
-            print("Warning! Length of list of forces to be set disagrees with number of atoms in the system!")
-            Exception('Forces:',len(forces),'Atoms:',len(self.atom_list))
-        for n,at in enumerate(self.atom_list):
-            at.force = forces[n]
-
-    def print_structure(self):
-        cell = self.cell
-        print('Alat:{}'.format(self.alat))
-        print("Cell:\t [[ {}, {}, {}".format(cell[0,0],cell[0,1],cell[0,2]))
-        print(" \t [ {},{},{}]".format(cell[1,0],cell[1,1],cell[1,2]))
-        print(" \t [ {},{},{}]]".format(cell[2,0],cell[2,1],cell[2,2]))
-
-
-
-def setup_structure(structure_config):
-
-    sc = structure_config
-    for n, at in enumerate(sc.positions):
-
-    return Structure(alat=sc['alat'], lattice = sc['lattice'],elements=sc['elements'],)
-
-
-
-
-class MD_Engine():
-    def __init__(self, md_params, structure_config,qe_config,ml_config,hpc_config,
-                  energy_or_force_driven='energy'):
+class MD_Engine(object):
+    def __init__(self, structure, md_config,qe_config,ml_model,hpc_config):
         """
         Initialize the features of the system, which include:
         input_atoms: Atoms in the unit cell, list of objects of type Atom (defined later on in this notebook)
@@ -173,78 +39,32 @@ class MD_Engine():
         """
         self.verbosity = md_config.get('verbosity',1)
 
-        self.atoms = input_atoms  # Instantiate internal list of atoms, populate via helper function
-        for atom in input_atoms:
-            if self.verbosity == 5:
-                print('Loading in', atom)
-
         self.dx = md_config.get('fd_dx',.1)
-        self.cell = structure_config.get('unit_cell')
-        self.model = model
-
-        self.time = 0.
-
-        self.store_trajectory = md_config.get('store_trajectory',True)
-
-        # Construct trajectories object
-        if store_trajectory:
-            self.trajs = []
-            for n in range(len(self.atoms)):
-                self.trajs.append([])
+        self.structure = structure
+        # self.ml_model = model
 
         # Set configurations
         self.qe_config = qe_config
-        self.ml_config = ml_config
+        self.ml_model = ml_model
+        self.md_config = md_config
+        self.assert_boundaries = md_config.get('assert_boundaries',False)
 
-        self.assert_boundaries = md_params.get('assert_boundaries',False)
+        self.fd_accuracy = None or md_config['fd_accuracy']
 
-        self.fd_accuracy = None or fd_accuracy
+        self.energy_or_force_driven = self.ml_model.energy_or_force
 
-        self.uncertainty_threshold = None or uncertainty_threshold
-        self.energy_or_force_driven = energy_or_force_driven
-
-    def get_config_energy(self, atoms=None):
+    def get_energy(self):
         """
-        The positions of the atoms are passed to a given model of choice,
-        in which the positions are converted into the configuration which is
-        appropriate to be parsed by the model.
+        Uses:
 
-        For instance, the positions may need to be converted into
-        atom-centered symmetry functions for the Gaussian Process model. By
-        passing in the positions, the necessary mapping is performed, and then
-        the appropriate model is called.
+        self.ml_model
+        self.Structure
+        :return: float Energy of configuration
         """
+        return self.ml_model.get_energy(self.structure)
 
-        atoms = atoms or self.atoms
 
-        # Simple Harmonic Oscillator
-        if self.model == 'SHO':
-            return SHO_energy(atoms)
-
-        #######
-        # Below are 'hooks' where we will later plug in to our machine learning models
-        #######
-        if self.model == 'GP':
-            config = GP_config(positions)
-            energy, uncertainty = GP_energ(config, self.ML_model)
-            if np.norm(uncertainty) > .01:
-                print("Warning: Uncertainty cutoff found.")
-
-            return GP_energy(config, self.ML_model)
-
-        # Kernel Ridge Regression
-        if self.model == "KRR":
-            # Helper function which converts atom positions into a configuration
-            #  appropriate for the KRR model. Could then be modified
-            #  later depending on alternate representations.
-            config = KRR_configuration(self.atoms, self.cell)
-            return KRR_energy(config, self.ML_model)
-
-        # Lennard Jones
-        if self.model == 'LJ':
-            return LJ_energy(atoms)
-
-    def update_atom_forces(self, atoms=None, cell=None, model=None, qe_config=None, fd_accuracy=None):
+    def set_fd_forces(self):
         """
         Perturbs the atoms by a small amount dx in each direction
         and returns the gradient (and thus the force)
@@ -254,84 +74,72 @@ class MD_Engine():
         runs Quantum ESPRESSO on the current configuration and then
         stores the forces output from ESPRESSO as the atomic forces.
         """
-        atoms = atoms or self.atoms
-        cell = cell or self.cell
-        model = model or self.model
-        qe_config = qe_config or self.qe_config
-        fd_accuracy = fd_accuracy or self.fd_accuracy
 
-        if self.energy_or_force_driven == "energy" and self.model == "AIMD":
+        dx = self.md_config['fd_dx']
+        fd_accuracy = self.md_config['fd_accuracy']
+
+        if self.energy_or_force_driven == "energy" and self.md_config.mode == "AIMD":
             print("WARNING! You are asking for an energy driven model with Ab-Initio MD;",
                   " AIMD is configured only to work on a force-driven basis.")
-
-        if self.model == 'AIMD':
-            results = qe_config.run_espresso(atoms, cell, qe_config)
+        """
+        if self.md_config['mode'] == 'AIMD':
+            results = qe_config.run_espresso(self.structure)
 
             if self.verbosity == 4: print("E0:", results['energy'])
 
             force_list = results['forces']
-            for n in range(len(force_list)):
-                atoms[n].force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
+            for n, at in enumerate(self.structure):
+                at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
 
             return
+        """
 
-        if self.energy_or_force_driven == "force":
-            # stuff_you_need_to_get
-            # force_list = placeholder_force_function()
-            pass
 
-        E0 = self.get_config_energy(atoms)
-        if self.verbosity == 4: print('E0:', E0)
 
-        # Depending on the finite difference accuracy specified at instantiation,
-        # perform either 2 or 4 potential energy calculations.
 
-        # Second-order finite-difference accuracy
-        if fd_accuracy == 2:
-            for atom in atoms:
-                for coord in range(3):
-                    # Perturb the atom to the E(x+dx) position
-                    atom.position[coord] += self.dx
-                    Eplus = self.get_config_energy(atoms)
-                    # Perturb the atom to the E(x-dx) position
-                    atom.position[coord] -= 2 * self.dx
-                    Eminus = self.get_config_energy(atoms)
+        E0 = self.get_energy(); if self.verbosity == 4: print('E0:', E0)
 
-                    # Return atom to initial position
-                    atom.position[coord] += self.dx
+        # Main loop of setting forces
+        for atom in self.structure:
+            for coord in range(3):
+                # Perturb to x + dx
+                atom.position[coord] += dx
+                Eplus = self.get_energy()
 
-                    atom.force[coord] = -first_derivative_2nd(Eminus, Eplus, self.dx)
-                    if self.verbosity == 5:
-                        print("Just assigned force on atom's coordinate", coord, " to be ",
-                              -first_derivative_2nd(Eminus, Eplus, self.dx))
-        # Fourth-order finite-difference accuracy
-        if fd_accuracy == 4:
-            for atom in atoms:
-                for coord in range(3):
-                    # Perturb the atom to the E(x+dx) position
-                    atom.position[coord] += self.dx
-                    Eplus = self.get_config_energy(atoms)
-                    # Perturb the atom to the E(x+2dx) position
-                    atom.position[coord] += self.dx
-                    Epp = self.get_config_energy(atoms)
-                    # Perturb the atom to the E(x-2dx) position
-                    atom.position[coord] -= 4.0 * self.dx
-                    Emm = self.get_config_energy(atoms)
-                    # Perturb the atom to the E(x-2dx) position
-                    atom.position[coord] += self.dx
-                    Eminus = self.get_config_energy(atoms)
+                # Perturb to x - dx
+                atom.position[coord] -= 2 * dx
+                Eminus = self.get_energy()
 
-                    atom.position[coord] += self.dx
+                if fd_accuracy==4:
+                    # Perturb to x + 2dx
+                    atom.position[coord] += 3* dx
+                    Epp = self.get_energy()
 
-                    atom.force[coord] = -first_derivative_4th(Emm, Eminus, Eplus, Epp, self.dx)
-                    if self.verbosity == 5:
-                        print("Just assigned force on atom's coordinate", coord, " to be ",
-                              -first_derivative_2nd(Eminus, Eplus, self.dx))
+                    # Perturb to x - 2dx
+                    atom.position[coord] -= 4* dx
+                    Emm = self.get_energy()
 
-        for atom in atoms:
-            atom.apply_constraint()
+                    # Perturb to x - dx
+                    atom.position[coord] += dx
 
-    def take_timestep(self, atoms=None, dt=None, method=None):
+                # Return atom to initial position
+                atom.position[coord] += dx
+
+                if fd_accuracy==2:
+                    atom.force[coord] = -first_derivative_2nd(Eminus,Eplus,dx)
+                elif fd_accuracy==4:
+                    atom.force[coord] = -first_derivative_4th(Emm,Eminus, Eplus,Epp, dx)
+                if self.verbosity == 5:
+                    print("Just assigned force on atom's coordinate", coord, " to be ",
+                          -first_derivative_2nd(Eminus, Eplus, self.dx))
+
+        for at in self.structure:
+            at.apply_constraint()
+
+
+
+    #TODO
+    def take_timestep(self,dt = None,method = None):
         """
         Propagate the atoms forward by timestep dt according to it's current force and previous position.
         Note that the first time step does not have the benefit of a previous position, so, we use
@@ -340,9 +148,9 @@ class MD_Engine():
 
         self.update_atom_forces()
 
-        atoms = atoms or self.atoms
-        dt = dt or self.dt
-        method = method or "Verlet"
+        dt = dt or self.md_config['dt']
+        dtdt = dt*dt
+        method = method or self.md_config["timestep_method"]
         self.time += dt
 
         temp_num = 0.
@@ -352,7 +160,7 @@ class MD_Engine():
         # https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
 
         if method == 'TO_Euler':
-            for atom in atoms:
+            for atom in self.Structure.atom_list:
                 for coord in range(3):
                     atom.prev_pos[coord] = np.copy(atom.position[coord])
                     atom.position[coord] += atom.velocity[coord] * dt + atom.force[coord] * dt ** 2 / atom.mass
@@ -364,26 +172,32 @@ class MD_Engine():
         ######
 
         elif method == 'Verlet':
-            for atom in atoms:
+            for atom in self.Structure.atom_list:
                 for coord in range(3):
                     # Store the current position to later store as the previous position
                     # After using it to update the position
 
                     temp_num = np.copy(atom.position[coord])
                     atom.position[coord] = 2 * atom.position[coord] - atom.prev_pos[coord] + atom.force[
-                                                                                                 coord] * dt ** 2 / atom.mass
+                                                                                                 coord] * dtdt /(2* atom.mass)
                     atom.velocity[coord] += atom.force[coord] * dt / atom.mass
                     atom.prev_pos[coord] = np.copy(temp_num)
                     if self.verbosity == 5: print("Just propagated a distance of ",
                                                   atom.position[coord] - atom.prev_pos[coord])
 
-        if self.store_trajectory:
-            for n in range(len(atoms)):
-                self.trajs[n].append(np.copy(atoms[n].position))
-
         if self.assert_boundaries: self.assert_boundary_conditions()
         if self.verbosity > 3: self.print_positions()
 
+    #TODO
+    def setup_run(self):
+
+        """
+        Checks a few classes within the 5 parameters before run begins.
+        :return:
+        """
+
+
+    #TODO
     def run(self, tf, dt, ti=0):
         """
         Handles timestepping; at each step, calculates the force and then
@@ -414,6 +228,7 @@ class MD_Engine():
                     self.retrain_ml_model(self.model, self.ML_model)
                     self.take_timestep(dt=-dt)
 
+    #TODO
     def assert_boundary_conditions(self):
         """
         We seek to have our atoms be entirely within the unit cell, that is,
@@ -447,6 +262,7 @@ class MD_Engine():
                 atom.position = a1 * (coords[0] % 1) + a2 * (coords[1] % 1) + a3 * (coords[2] % 1)
                 if self.verbosity == 4: print("BC updated position:", atom.position)
 
+    #TODO
     def print_positions(self, forces=True):
         """
         Prints out the current positions of the atoms line-by-line,
@@ -461,63 +277,3 @@ class MD_Engine():
                 print('Atom %d:' % n, np.round(pos, decimals=4), ' Force:', np.round(force, decimals=6))
             else:
                 print('Atom %d:' % n, np.round(pos, decimals=4))
-
-    def gauge_model_uncertainty(self):
-        """
-        For later implementation with the Gaussian Process model.
-        Will check to see if the uncertainty of the model's prediction of the energy
-        within a given configuration is within an acceptable bound given by threshold.
-
-        If it is unacceptable, the current configuration is exported into a Quantum ESPRESSO run,
-        which is then added into the ML dataset and the model is re-trained.
-        """
-        if self.model == "KRR":
-
-            config = KRR_configuration(self.atoms, self.cell)
-            uncertainty = KRR_uncertainty(config, self.ML_model)
-            if self.verbosity >= 4:
-                print("Uncertainty at current configuration:", uncertainty)
-            if self.uncertainty_threshold < uncertainty:
-                if self.verbosity > 2: print("!! The uncertainty of the model is outside of the bounds; calling DFT...")
-                return False
-
-        if self.model == 'GP':
-            config = GP_config(positions)
-            energy, uncertainty = GP_energ(config, self.ML_model)
-            if np.norm(uncertainty) > self.uncertainty_threshold:
-                print("Warning: Uncertainty cutoff met.")
-
-            return GP_energy(config, self.ML_model)
-
-            pass
-
-        return True
-
-    def retrain_ml_model(self, model=None, ML_model=None):
-        model = model or self.model
-        ML_model = ML_model or self.ML_model
-
-        if self.model == 'KRR':
-
-            init_train_set = np.array(self.ML_model.total_train_set)
-            init_train_ens = np.array(self.ML_model.total_train_ens)
-            aug_train_set, aug_train_ens = get_aug_values(self.qe_config.correction_folder, ML_model=self.ML_model)
-            positions = [aug_train_set[m * 3:(m + 1) * 3] for m in range(int(self.ML_model.vec_length / 3))]
-            aug_train_set = KRR_configuration(atoms=None, cell=self.cell, point_set=positions)
-
-            if self.verbosity == 5:
-                print('Trying to reshape the augmented training set with shape ', aug_train_set.shape,
-                      'into the shape of ', init_train_set.shape)
-            new_train_set = np.concatenate((init_train_set, aug_train_set), axis=0)
-            new_train_ens = np.append(init_train_ens, aug_train_ens)
-            if self.verbosity == 5:
-                print('Augmented and original set now has shape of:', new_train_set.shape)
-            self.ML_model.fit(new_train_set, new_train_ens)
-            self.ML_model.total_train_set = np.array(new_train_set)
-            self.ML_model.total_train_ens = np.array(new_train_ens)
-            # print('The size of the total train set is now',self.ML_model.total_train_set.shape)
-            # print("The size of the total energy set is now",self.ML_model.total_train_ens)
-            return
-
-        if self.model == "GP":
-            pass

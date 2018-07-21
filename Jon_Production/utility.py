@@ -424,6 +424,40 @@ def pred_comp(pos_curr, atom, cutoff, eta_lower, eta_upper, eta_length, brav_mat
 
     return force_pred, err_pred
 
+
+
+# ------------------------------------------------------
+#              Math helper functions
+# ------------------------------------------------------
+
+
+def first_derivative_2nd(fm, fp, h):
+    """
+    Computes the second-order accurate finite difference form of the first derivative
+    which is (  fp/2 - fm/2)/(h)
+    as seen on Wikipedia: https://en.wikipedia.org/wiki/Finite_difference_coefficient
+    """
+    if h == 0:
+        print("Warning... Trying to divide by zero. Derivative will diverge.")
+        return np.nan
+
+    return (fp - fm) / float(2 * h)
+
+
+def first_derivative_4th(fmm, fm, fp, fpp, h):
+    """
+    Computes the fourth-order accurate finite difference form of the first derivative
+    which is (fmm/12  - 2 fm /3 + 2 fp /3 - fpp /12)/h
+    as seen on Wikipedia: https://en.wikipedia.org/wiki/Finite_difference_coefficient
+    """
+
+    if h == 0:
+        print("Warning... Trying to divide by zero. Derivative will diverge.")
+
+    return (fmm / 12. - 2 * fm / 3. + 2 * fp / 3. - fpp / 12.) / float(h)
+
+
+
 # ------------------------------------------------------
 #           Output file helper functions
 # ------------------------------------------------------

@@ -1,3 +1,4 @@
+
 structure_params:
   alat: 5.431
   frac_pos:
@@ -13,6 +14,13 @@ structure_params:
 
 
 md_params:
+
+  name: Steven
+  comment: This is a test of the yaml framework.
+
+  mode: AIMD
+
+  ti: 0.0
   frames: 50
   noa: 51
   step: 20
@@ -20,6 +28,7 @@ md_params:
   verbosity : 1
   fd_dx: .1
   assert_boundaries: False
+  timestep_method: 'Verlet'
 
   fd_accuracy: 2
 

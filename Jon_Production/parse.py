@@ -64,11 +64,17 @@ class structure_config(dict):
             raise Exception("Malformed input file-- structure parameters incorrect.")
 
         if self['lattice']:
+            self['lattice'] =np.array(self['lattice'])
             self['unit_cell']= self['alat'] * np.array([self['lattice'][0],self['lattice'][1],self['lattice'][2]])
         if self.get('pos',False) and self.get('frac_pos',False):
             print("Warning! Positions AND fractional positions were given--"
                   "This is not intended use! You must select one or the other in your input.")
             raise Exception("Fractional position AND Cartesian positions given.")
+
+
+        if self['lattice'].shape!=(3,3):
+            print("WARNING! Inappropriately shaped cell passed as input to structure!")
+            raise Exception('Lattice has shape', np.shape(self['lattice']))
 
         if self.get('pos',False):
             self.fractional=False
@@ -88,9 +94,6 @@ class structure_config(dict):
         super(structure_config,self).__init__(self)
 
 
-
-
-
 def load_config(path,verbose=True):
 
     if not os.path.isfile(path) and verbose:
@@ -101,7 +104,6 @@ def load_config(path,verbose=True):
             out = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             print(exc)
-
 
     return out
 
@@ -134,6 +136,135 @@ def setup_configs(path,verbose=True):
         ml = ml_config({})
 
 
+
+
+
+class Atom():
+    def __init__(self, position=(0., 0., 0.), velocity=(0., 0., 0.), force=(0., 0., 0.), initial_pos=(0, 0, 0),
+                 mass=None, element='', constraint=(False, False, False)):
+
+        self.position = np.array(position)
+        self.velocity = np.array(velocity)
+        self.force = np.array(force)
+        self.element = str(element)
+        self.trajectory = []
+
+        # Used in Verlet integration
+        self.prev_pos = np.array(self.position)
+        self.initial_pos = self.position if self.position.all != (0, 0, 0) else initial_pos
+        # Boolean which signals if the coordinates are fractional in their original cell
+        self.constraint = list(constraint)
+        self.fingerprint = rand.rand()  # This is how I tell atoms apart. Easier than indexing them manually...
+
+        self.mass = mass or 1.0
+
+        self.parameters = {'position': self.position,
+                           'velocity': self.velocity,
+                           'force': self.force,
+                           'mass': self.mass,
+                           'element': self.element,
+                           'constraint': self.constraint,
+                           'initial_pos': self.initial_pos}
+    # Pint the
+    def __str__(self):
+        return str(self.parameters)
+
+    def get_position(self):
+        return self.position
+
+    def get_velocity(self):
+        return self.velocity
+
+    def get_force(self):
+        return self.force
+
+    def apply_constraint(self):
+        for n in range(3):
+            if self.constraint[n]:
+                self.velocity[n] = 0.
+                self.force[n] = 0.
+
+
+class Structure(list):
+    """
+    Class which stores list of atoms as well as information on the structure,
+    which is acted upon by the MD engine.
+    Parameterized by the structure_params object in the YAML input files.
+
+    args:
+    alat (float): Scaling factor for the lattice
+    cell (3x3 nparray): Matrix of vectors which define the unit cell
+    elements (list [str]): Names of elements in the system
+    atom_list (list [Atom]): Atom objects which are propagated by the MD Engine
+    """
+    mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855}
+
+    def __init__(self, alat=1.,lattice=np.eye(3), atoms=None,fractional=True):
+
+
+        self.atoms = [] or atoms
+        self.elements = [at.element for at in atoms]
+        self.species =  [] or set(self.elements)
+        self.alat = alat
+        self.lattice = lattice
+        self.fractional = fractional
+
+        super(Structure, self).__init__(self.atoms)
+
+
+    def print_atoms(self,fractional=True):
+
+        fractional = self.fractional
+
+        if fractional:
+            for n, at in enumerate(self.atoms):
+                print("{}:{} ({},{},{}) ".format(n, at.element, at.position[0], at.position[1], at.position[2]))
+        else:
+            for n, at in enumerate(self.atoms):
+                print("{}:{} ({},{},{}) ".format(n, at.element, at.position[0], at.position[1], at.position[2]))
+
+    def __str__(self):
+        self.print_atoms()
+
+    def get_positions(self):
+        return [atom.position for atom in self.atoms]
+
+    def get_positions_and_element(self):
+        return[[atom.element,atom.position] for atom in self.atoms]
+
+    def set_forces(self,forces):
+        """
+        Sets forces
+        :param forces: List of length of atoms in system of length-3 force components
+        :return:
+        """
+        if len(self.atoms)!=len(forces):
+            print("Warning! Length of list of forces to be set disagrees with number of atoms in the system!")
+            Exception('Forces:',len(forces),'Atoms:',len(self.atoms))
+        for n,at in enumerate(self.atoms):
+            at.force = forces[n]
+
+    def print_structure(self):
+        lattice = self.lattice
+        print('Alat:{}'.format(self.alat))
+        print("Cell:\t [[ {}, {}, {}".format(lattice[0,0],lattice[0,1],lattice[0,2]))
+        print(" \t [ {},{},{}]".format(lattice[1,0],lattice[1,1],lattice[1,2]))
+        print(" \t [ {},{},{}]]".format(lattice[2,0],lattice[2,1],lattice[2,2]))
+
+
+
+
+
+def setup_structure(structure_config):
+
+    sc = structure_config
+
+    if sc['velocities']: has_vel = True
+    if sc['']
+
+
+
+    return Structure(alat=sc['alat'], lattice = sc['lattice'],elements=sc['elements'],)
 
 
 class qe_config(dict):
