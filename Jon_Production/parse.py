@@ -37,13 +37,6 @@ def flatten_dict(d):
     return dict(items)
 
 
-class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
-
 class md_config(dict):
     """
     Creates an md_params object.
@@ -424,7 +417,6 @@ class qe_config(dict):
 
 
 def main():
-
     # load from config file
     config = load_config('input.yaml')
     print(type(config))

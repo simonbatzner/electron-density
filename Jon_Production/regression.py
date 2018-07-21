@@ -315,7 +315,6 @@ class KernelRidgeRegression(RegressionModel):
         """
         self.model.fit(self.training_data['symm_norm'], self.training_data['forces_norm'])
 
-
     def inference(self):
         """
         Predict on test data
