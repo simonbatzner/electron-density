@@ -595,9 +595,9 @@ class QE_Config(dict):
             dirname = 'temprun'
 
         runpath = os.path.join(self.get('outdir', '.'), dirname)
+        self.write_pwscf_input(structure, runpath)
 
         # UNFINISHED BELOW THIS LINE
-        self.write_pwscf_input(structure, runpath)
 
         output_file = self.run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
                                         params=input_params, kpoints=kpts,
@@ -773,7 +773,7 @@ def main():
     print(qe_conf)
 
     structure = Structure_Config(config['structure_params'])
-    print(struc_fig)
+    print(structure)
 
     ml_fig = ml_config(params=config['ml_params'], print_warn=True)
     print(ml_fig)
