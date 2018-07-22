@@ -22,11 +22,11 @@ md_params:
   mode: LJ   # ML | AIMD | LJ
 
   ti: 0.0
-  frames: 50
+  frames: 100
   mass: 1.0   # Set as an array if multiple atomic species, or 0 for automatic setting by element
   verbosity : 3
   fd_dx: .1
-  dt: .1
+  dt: .01
   assert_boundaries: False
   timestep_method: 'Verlet'
 
@@ -62,7 +62,7 @@ ml_params:
 
 qe_params:
   ecut: 18.0
-  nk: 4.0
+  nk: 4
   sc_dim : 3
   npool: 36
   system_name: 'AIMD'

@@ -10,7 +10,6 @@ from parse import load_config_yaml, QE_Config, Structure_Config, ml_config, MD_C
 from utility import first_derivative_2nd, first_derivative_4th
 
 mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994}
-from parse import *
 
 
 class MD_Engine(MD_Config):
@@ -165,18 +164,17 @@ class MD_Engine(MD_Config):
             method (str): Choose one of Verlet or Third-Order Euler.
 
         """
-        self.set_forces()
-        self.structure.record_trajectory(time=self.dt, position=True, force=True)
+        tick=self.time
+        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, force=True)
 
         if self['verbosity'] >= 3:
-            print(self.get_report(forces=True, time_elapsed=self.tick-self.tock),)
+            print(self.get_report(forces=True))
 
         dt = dt or self.dt
         dtdt = dt * dt
 
         method = method or self["timestep_method"]
-        self['time'] += dt
-        self.frame += 1
+
 
         # Third-order euler method, Is a suggested way to begin a Verlet run, see:
         # https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
@@ -211,8 +209,12 @@ class MD_Engine(MD_Config):
 
         if self['assert_boundaries']:
             self.assert_boundary_conditions()
-        self.structure.record_trajectory(time=self.dt, position=True)
-        self.tock = time.time()
+
+        self['time'] += dt
+        self.frame += 1
+        self.set_forces()
+        tock = time.time()
+        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True,elapsed=tick-tock)
 
 
     # TODO Determine all of the necessary ingredients which may or may not be missing
@@ -238,7 +240,7 @@ class MD_Engine(MD_Config):
         """
 
         self.set_forces()
-        self.structure.record_trajectory(time=self.dt, position=True, force=True)
+        self.structure.record_trajectory(self.frame, self.time, position=True, force=True)
 
         if self['time'] == 0:
             self.take_timestep(method='TO_Euler')
@@ -298,21 +300,20 @@ class MD_Engine(MD_Config):
 
 
 def main():
-    pass
+    config = load_config_yaml('H2_test.yaml')
+    print(config)
+    qe_conf = QE_Config(config['qe_params'], warn=True)
+    structure = Structure_Config(config['structure_params']).to_structure()
+    ml_fig = ml_config(params=config['ml_params'], print_warn=True)
+    md_fig = MD_Config(params=config['md_params'], warn=True)
+
+    a = MD_Engine(structure, md_fig, qe_conf, ml_fig)
+
+    print(structure)
+
+    a.run()
 
 
 if __name__ == '__main__':
     main()
 
-config = load_config_yaml('H2_test.yaml')
-print(config)
-qe_conf = QE_Config(config['qe_params'], warn=True)
-structure = Structure_Config(config['structure_params']).to_structure()
-ml_fig = ml_config(params=config['ml_params'], print_warn=True)
-md_fig = MD_Config(params=config['md_params'], warn=True)
-
-a = MD_Engine(structure, md_fig, qe_conf, ml_fig)
-
-print(structure)
-
-a.run()

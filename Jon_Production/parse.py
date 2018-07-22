@@ -10,7 +10,7 @@ import numpy.linalg as la
 from Jon_Production.utility import write_file, run_command
 
 
-#TODO: Move this to utility file once we're done with everything else
+# TODO: Move this to utility file once we're done with everything else
 def flatten_dict(d):
     """
     Recursively flattens dictionary
@@ -28,14 +28,13 @@ def flatten_dict(d):
 
     return dict(items)
 
-#TODO: Move this to utility file once we're done with everything else here
+
+# TODO: Move this to utility file once we're done with everything else here
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
-
-
 
 
 # ------------------------------------------------------
@@ -89,7 +88,6 @@ class ml_config(dict):
             print("WARNING! Missing ML parameter, running model with default for: {}".format(missing))
 
 
-
 # ------------------------------------------------------
 #              MD Config
 # ------------------------------------------------------
@@ -103,7 +101,7 @@ class MD_Config(dotdict):
         params (dict): A set of input parameters as a dictionary.
     """
 
-    def __init__(self, params,warn=True):
+    def __init__(self, params, warn=True):
 
         self._params = ['name', 'comment', 'mode', 'ti', 'frames', 'mass',
                         'fd_dx', 'verbosity', 'assert_boundaries', 'timestep_method',
@@ -119,7 +117,7 @@ class MD_Config(dotdict):
                       "mode": 'ML',
                       'ti': 0,
                       'frames': 100,
-                      'dt':.1,
+                      'dt': .1,
                       'mass': 0,
                       'fd_dx': .01,
                       'verbosity': 1,
@@ -130,19 +128,19 @@ class MD_Config(dotdict):
 
         # If value was not specified, load in default values.
 
-        if self.get('frames',False) and self.get('tf',False) and self.get('dt', False) and warn:
+        if self.get('frames', False) and self.get('tf', False) and self.get('dt', False) and warn:
             print("WARNING! Frames and final time specified;"
                   " these two parameters cannot both exist. Pick either a number of timesteps"
                   " or an automatically computed computer of timesteps.")
             raise Exception("Number of frames and final time both specified.")
 
-        if self.get('frames',False) and self.get('tf',False) and self.get('dt', False):
+        if self.get('frames', False) and self.get('tf', False) and self.get('dt', False):
             print("WARNING! Frames and final time specified;"
                   " these two parameters cannot both exist. Pick either a number of timesteps"
                   " or an automatically computed computer of timesteps.")
             raise Exception("Number of frames and final time both specified.")
 
-        self.time  = 0 + self.get('ti',0)
+        self.time = 0 + self.get('ti', 0)
         self.frame = 0
         missing = []
 
@@ -169,7 +167,7 @@ class Atom(object):
         self.velocity = np.array(velocity)
         self.force = np.array(force)
         self.element = str(element)
-        self.trajectory = {} #keys: time rounded to 3 decimal places, values: {'position':[array], 'force':[array]}
+        self.trajectory = {}  # keys: time rounded to 3 decimal places, values: {'position':[array], 'force':[array]}
 
         # Used in Verlet integration
         self.prev_pos = np.array(self.position)
@@ -219,6 +217,7 @@ class Structure(list):
     elements (list [str]): Names of elements in the system
     atom_list (list [Atom]): Atom objects which are propagated by the MD Engine
     """
+
     def __init__(self, atoms, alat=1., lattice=np.eye(3), fractional=True):
 
         self.atoms = [] or atoms
@@ -228,20 +227,20 @@ class Structure(list):
         self.lattice = lattice
         self.fractional = fractional
 
-        self.trajectory={}
+        self.trajectory = {}
 
         super(Structure, self).__init__(self.atoms)
 
     def get_pprint_atoms(self):
 
         fractional = self.fractional
-        report=''
+        report = ''
         if fractional:
             for n, at in enumerate(self.atoms):
-                report+="{}:{} ({},{},{}) \n".format(n, at.element, at.position[0], at.position[1], at.position[2])
+                report += "{}:{} ({},{},{}) \n".format(n, at.element, at.position[0], at.position[1], at.position[2])
         else:
             for n, at in enumerate(self.atoms):
-                report+="{}:{} ({},{},{}) \n".format(n, at.element, at.position[0], at.position[1], at.position[2])
+                report += "{}:{} ({},{},{}) \n".format(n, at.element, at.position[0], at.position[1], at.position[2])
 
         return report
 
@@ -273,19 +272,53 @@ class Structure(list):
         print(" \t [ {},{},{}]".format(lattice[1, 0], lattice[1, 1], lattice[1, 2]))
         print(" \t [ {},{},{}]]".format(lattice[2, 0], lattice[2, 1], lattice[2, 2]))
 
-    def record_trajectory(self,time,position=False,force=False):
-        t = np.round(time,3)
-        for at in self:
-            if not at.trajectory.get(t, False):
-                at.trajectory[t] = {}
-            if position:
-                at.trajectory[t]['position'] = np.array(at.position)
-            if force:
-                at.trajectory[t]['force'] = np.array(at.force)
+    def record_trajectory(self, frame, time=None, position=False, velocity=False, force=False, energy=None,
+                          elapsed=None):
 
+        if not self.trajectory.get(frame, False):
+            self.trajectory[frame] = {}
 
+        if time is not None:
+            self.trajectory[frame]['t'] = time
+        if position:
+            positions = [at.position for at in self.atoms]
+            self.trajectory[frame]['positions'] = np.array(positions)
+        if velocity:
+            velocities = [at.velocity for at in self.atoms]
+            self.trajectory[frame]['velocities'] = energy
+        if force:
+            forces = [at.force for at in self.atoms]
+            self.trajectory[frame]['forces'] = np.array(forces)
+        if energy is not None:
+            self.trajectory[frame]['energy'] = energy
+        if elapsed is not None:
+            self.trajectory[frame]['elapsed'] = elapsed
 
-    def assert_boundary_conditions(self,verbosity=1):
+    def get_species_mass(self, element):
+        for atom in self.atoms:
+            if atom.element == element:
+                return atom.mass
+
+        print("Warning! Element {} not found in strucutre".format(element))
+        raise Exception("Tried to get mass of a species that didn't exist in structure.")
+
+    @property
+    def symbols(self):
+        return [s[0] for s in self['positions']]
+
+    @property
+    def positions(self):
+        return [at.position for at in self.atoms]
+
+    @property
+    def n_atoms(self):
+        return len(self['positions'])
+
+    @property
+    def n_species(self):
+        return len(self.species)
+
+    def assert_boundary_conditions(self, verbosity=1):
         """
         We seek to have our atoms be entirely within the unit cell, that is,
         for bravais lattice vectors a1 a2 and a3, we want our atoms to be at positions
@@ -340,7 +373,6 @@ class Structure_Config(dict):
                       'position': self.get('frac_pos', False) or self.get('pos', False),
                       'lattice': self.get('lattice', False)}
 
-
         if warn and not all(check_list.values()):
             print('WARNING! Some critical parameters which are needed for structures'
                   ' to work are not present!!')
@@ -364,7 +396,7 @@ class Structure_Config(dict):
 
         if self.get('frac_pos', False):
             self.fractional = True
-            self.positions=self['frac_pos']
+            self.positions = self['frac_pos']
         if self.get('pos', False):
             self.fractional = False
             self.positions = self['pos']
@@ -400,12 +432,12 @@ class Structure_Config(dict):
 
             # Loop through position items defined in the yaml file
 
-            if self.get('velocities',False):
+            if self.get('velocities', False):
                 velocity = self['velocities'][n]
             else:
                 velocity = (0, 0, 0)
 
-            if self.get('forces',False):
+            if self.get('forces', False):
                 force = self['forces'][n]
             else:
                 force = (0, 0, 0)
@@ -421,16 +453,17 @@ class Structure_Config(dict):
         return Structure(atoms=atoms, alat=self['alat'], lattice=self['lattice'], fractional=self.fractional)
 
 
-def ase_to_structure(struc,alat,fractional,perturb=0):
+def ase_to_structure(struc, alat, fractional, perturb=0):
     """
     Quick helper function which turns an ASE structure
     to a PyFly one. Warning: You must specify if the structure is specified
     in fractional coordinates, and if a scalaing factor by alat is necessary.
     You must also import ASE yourself.
 
+    :param alat:
+    :param fractional:
     :param struc: ASE Structure object
-    :param alat (float): scaling factor for lattice
-    :param fractional (bool): Flag to handle if the atomic positions
+    :param fractional: Flag to handle if the atomic positions
             are in fractional coordintes
     :return:
     """
@@ -438,17 +471,18 @@ def ase_to_structure(struc,alat,fractional,perturb=0):
     symbols = struc.get_chemical_symbols()
     lattice = b.get_cell
 
-    atoms=[]
+    atoms = []
     for n in range(len(positions)):
-        atoms.append(Atom(position=positions[n],element=symbols[n]))
+        atoms.append(Atom(position=positions[n], element=symbols[n]))
 
-    #TODO ADD THIS
-    if perturb>0:
+    # TODO ADD THIS
+    if perturb > 0:
+        for at in atoms:
+            for coord in range(3):
+                at.position[coord] += random.normal(0, scale=perturb)
         pass
 
-
-    return Structure(atoms,alat=alat,lattice=np.array(lattice),fractional=fractional)
-
+    return Structure(atoms, alat=alat, lattice=np.array(lattice), fractional=fractional)
 
 
 # ------------------------------------------------------
@@ -464,29 +498,76 @@ class QE_Config(dict):
 
     def __init__(self, params={}, warn=False):
 
+        self._params = ['nk', 'system_name',
+                        'pseudo_dir', 'outdir', 'pw_command', 'in_file',
+                        'out_file', 'update_name', 'augmentation_folder',
+                        'molecule', 'serial']
+
         super(QE_Config, self).__init__()
 
         if params:
             self.update(params)
         qe = self
 
+        default_qe = {'system_name': 'QE', 'pw_command': os.environ.get('PWSCF_COMMAND'),
+                      'parallelization': {'np': 1, 'nk': 0, 'nt': 0, 'nd': 0, 'ni': 0}}
 
-        qe_defaults={'system_name':'QE','pw_command':os.environ.get('PWSCF_COMMAND'),
-                     'parallelization':{'np': 1, 'nk': 0, 'nt': 0, 'nd': 0,
-                                                                              'ni': 0}}
-        if not (qe.get('system_name', False)): self['system_name'] = 'QE'
-        if not (qe.get('pw_command', False)): self['pw_command'] = os.environ.get('PWSCF_COMMAND')
-        if not (qe.get('parallelization', False)): self['parallelization'] = {'np': 1, 'nk': 0, 'nt': 0, 'nd': 0,
-                                                                              'ni': 0}
+        missing = []
 
-        if warn and not all([
-            qe.get('ecut', False),
-            qe.get('nk', False),
-            qe.get('sc_dim', False),
-            qe.get('pw_command', False),
-            qe.get('pseudo_dir', False),
-            qe.get('in_file', False)]):
+        for key in default_qe.keys():
+            if key not in self.keys():
+                missing.append(key)
+
+        for key in missing:
+            print("Achtung! Missing MD parameter, running model with default for: {}".format(missing))
+            self[key] = default_qe[key]
+
+        mandatory_params = ['ecut', 'nk', 'pw_command', 'pseudo_dir',
+                            'in_file', 'outdir']
+        if warn and not all([qe.get(param, False) for param in mandatory_params]):
             print('WARNING! Some critical parameters which are needed for QE to work are not present!')
+            for param in mandatory_params:
+                if not qe.get(param, False):
+                    print("Missing parameter ", param, '\n')
+            raise Exception("Missing necessary QE parameters.")
+
+        # ----------------
+        # Set up K points
+        # ----------------
+        nk = self['nk']
+        if type(nk) == type(int) and (nk == 1 or nk == 0):
+            option = 'gamma'
+        else:
+            option = 'automatic'
+        if type(nk) == type(list) and list([int(n) for n in nk]) == [1, 1, 1]:
+            option = 'gamma'
+        else:
+            option = 'automatic'
+
+        self.kpts = {'option': option, 'gridsize': [int(nk)] * 3 if (isinstance(nk,int) or isinstance(nk,float))
+        else [nk[0], nk[1], nk[2]]}
+        if type(nk) == type(list) and len(nk) > 3:
+            self.kpts['offset'] = [nk[-3], nk[-2], nk[-1]]
+
+    @property
+    def pwin(self):
+        return self['pwscf_input']
+
+    def validate_against_structure(self, structure):
+        """
+        Tests to make sure that ESPRESSO will be able to run
+        correctly for the structure which is provided.
+
+
+        :param structure (Structure): Structure object
+
+        :return bool: If ESPRESSO should be able to run with this structure
+        """
+
+        for species in structure.species:
+            if species not in self['species_pseudo'].keys():
+                print("WARNING! A pseudopotential file is not"
+                      "specified for the species ", species)
 
     def as_dict(self):
         d = dict(self)
@@ -494,114 +575,36 @@ class QE_Config(dict):
         d["@class"] = self.__class__.__name__
         return d
 
-    def run_espresso(self, atoms, cell, iscorrection=False):
+    def run_espresso(self, structure, augment_db=False):
+        """
+        Sets up the directory where pwscf is to be run; then, calls pw.x.
+        Changes depending on if an augmentation run is being called i.e. one which is
+        going to be a part of a ML Regression model re-training later.
 
-        pseudopots = {}
-        elements = [atom.element for atom in atoms]
+        :param Structure: structure object.
+        :param augment_db (bool): True if run will be a part of future ML re-training.
+        :return:
+        """
 
-        for element in elements:
-            pseudopots[element] = self.pseudopotentials[element]
-
-        ase_struc = Atoms(symbols=[atom.element for atom in atoms],
-                          positions=[atom.position for atom in atoms],
-                          cell=cell,
-                          pbc=[0, 0, 0] if self.molecule else [1, 1, 1])
-
-        struc = Struc(ase2struc(ase_struc))
-
-        if self.molecule:
-            kpts = Kpoints(gridsize=[1, 1, 1], option='gamma', offset=False)
-
-        else:
-            nk = self.nk
-            kpts = Kpoints(gridsize=[nk, nk, nk], option='automatic', offset=False)
-
-        if iscorrection:
-            self.correction_number = self.get_correction_number()
-            # print("rolling with correction number",qe_config.correction_number)
-            dirname = self.system_name + '_step_' + str(self.correction_number)
+        if augment_db:
+            # SIMON- This is where you change things up depending on if it's an augmentation run
+            dirname = ''
+            pass
 
         else:
             dirname = 'temprun'
 
-        runpath = Dir(path=os.path.join(os.environ['PROJDIR'], "AIMD", dirname))
+        runpath = os.path.join(self.get('outdir', '.'), dirname)
 
-        input_params = PWscf_inparam({
-            'CONTROL': {
-                'prefix': self.system_name,
-                'calculation': 'scf',
-                'pseudo_dir': os.environ['ESPRESSO_PSEUDO'],
-                'outdir': runpath.path,
-                #            'wfcdir': runpath.path,
-                'disk_io': 'low',
-                'tprnfor': True,
-                'wf_collect': False
-            },
-            'SYSTEM': {
-                'ecutwfc': self.ecut,
-                'ecutrho': self.ecut * 8,
-                #           'nspin': 4 if 'rel' in potname else 1,
+        # UNFINISHED BELOW THIS LINE
+        self.write_pwscf_input(structure, runpath)
 
-                'occupations': 'smearing',
-                'smearing': 'mp',
-                'degauss': 0.02,
-                # 'noinv': False
-                # 'lspinorb':True if 'rel' in potname else False,
-            },
-            'ELECTRONS': {
-                'diagonalization': 'david',
-                'mixing_beta': 0.5,
-                'conv_thr': 1e-7
-            },
-            'IONS': {},
-            'CELL': {},
-        })
+        output_file = self.run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
+                                        params=input_params, kpoints=kpts,
+                                        parallelization=self.parallelization)
 
-        output_file = run_qe_pwscf(runpath=runpath, struc=struc, pseudopots=pseudopots,
-                                   params=input_params, kpoints=kpts,
-                                   parallelization=self.parallelization)
         output = parse_qe_pwscf_output(outfile=output_file)
-
-        with open(runpath.path + '/en', 'w') as f:
-            f.write(str(output['energy']))
-        with open(runpath.path + '/pos', 'w')as f:
-            for pos in [atom.position for atom in atoms]:
-                f.write(str(pos) + '\n')
-
         return output
-
-    def create_scf_input(self):
-        """
-        Jon V's version of the PWSCF formatter.
-        Works entirely based on internal settings.
-        """
-
-        scf_text = """ &control
-            calculation = 'scf'
-            pseudo_dir = '{0}'
-            outdir = '{1}'
-            tprnfor = .true.
-         /
-         &system
-            ibrav= 0
-            nat= {2}
-            ntyp= 1
-            ecutwfc ={3}
-            nosym = .true.
-         /
-         &electrons
-            conv_thr =  1.0d-10
-            mixing_beta = 0.7
-         /
-        ATOMIC_SPECIES
-         Si  28.086  Si.pz-vbc.UPF
-        {4}
-        {5}
-        K_POINTS automatic
-         {6} {6} {6}  0 0 0
-            """.format(self['pseudo_dir'], self['outdir'],
-                       self['nat'], self['ecut'], self['cell'], self['pos'], self['nk'])
-        return scf_text
 
     def run_scf_from_text(self, scf_text, npool, out_file='pw.out', in_file='pw.in'):
 
@@ -612,7 +615,87 @@ class QE_Config(dict):
         qe_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(self['pw_loc'], npool, in_file, out_file)
         run_command(qe_command)
 
+    @staticmethod
+    def qe_value_map(value):
+        """
+    	Function used to interpret correctly values for different
+    	fields in a Quantum Espresso input file (i.e., if the user
+    	specifies the string '1.0d-4', the quotes must be removed
+    	when we write it to the actual input file)
+    	:param: a string
+    	:return: formatted string to be used in QE input file
+    	"""
+        if isinstance(value, bool):
+            if value:
+                return '.true.'
+            else:
+                return '.false.'
+        elif isinstance(value, (float, numpy.float)) or isinstance(value, (int, numpy.int)):
+            return str(value)
+        elif isinstance(value, str):
+            return "'{}'".format(value)
+        else:
+            print("Strange value ", value)
+            raise ValueError
 
+    def write_pwscf_input(self, structure, runpath):
+        """Make input param string for PW
+
+        args:
+        structure (Structure object)
+        runpath (str): path to where to write pwscf input file
+        """
+        # automatically fill in missing values
+
+        self.pwin['SYSTEM']['ntyp'] = structure.n_species
+        self.pwin['SYSTEM']['nat'] = structure.n_atoms
+        self.pwin['SYSTEM']['ibrav'] = 0
+
+        # Write the main input block
+        inptxt = ''
+        for namelist in ['CONTROL', 'SYSTEM', 'ELECTRONS', 'IONS', 'CELL']:
+            inptxt += '&{}\n'.format(namelist)
+            for key, value in self.pwin[namelist].items():
+                inptxt += '	{} = {}\n'.format(key, self.qe_value_map(value))
+            inptxt += '/ \n'
+
+        # --------------------------
+        # write the K_POINTS block
+        # --------------------------
+        if self.kpts['option'] == 'automatic':
+            inptxt += 'K_POINTS {automatic}\n'
+
+        if self.kpts['option'] == 'gamma':
+            inptxt += "K_POINTS {gamma}\n"
+        else:
+            inptxt += ' {:d} {:d} {:d}'.format(*self.kpts['gridsize'])
+
+            if self.kpts.get('offset', False):
+                inptxt += '  1 1 1\n'
+            else:
+                inptxt += '  0 0 0\n'
+
+        # write the ATOMIC_SPECIES block
+        inptxt += 'ATOMIC_SPECIES\n'
+        for elem in structure.species:
+            inptxt += '  {} {} {}\n'.format(elem, structure.get_species_mass(elem), self['species_pseudo'][elem])
+
+        # Write the CELL_PARAMETERS block
+        inptxt += 'CELL_PARAMETERS {angstrom}\n'
+        for vector in structure['lattice']:
+            inptxt += ' {} {} {}\n'.format(*vector)
+
+        # Write the ATOMIC_POSITIONS in crystal coords
+        inptxt += 'ATOMIC_POSITIONS {angstrom}\n'
+        for index, positions in enumerate(structure.positions):
+            inptxt += '  {} {:1.5f} {:1.5f} {:1.5f}'.format(positions[0], *positions[1])
+
+        infile = os.path.join(runpath.path, 'pwscf.in')
+        f = open(infile, 'w')
+        f.write(inptxt)
+        f.close()
+
+        return infile
 
 
 # ------------------------------------------------------
@@ -620,15 +703,13 @@ class QE_Config(dict):
 # ------------------------------------------------------
 
 class HPC_Config(dict):
-
     def __init__(self, params, warn=True):
-
         self._params = ['cores', 'nodes', 'partition', 'time']
 
         if params:
             self.update(params)
 
-        super(HPC_Config,self).__init__(params)
+        super(HPC_Config, self).__init__(params)
 
 
 # ------------------------------------------------------------
@@ -650,7 +731,6 @@ def load_config_yaml(path, verbose=True):
 
 
 def setup_configs(path, verbose=True):
-
     setup_dict = load_config_yaml(path, verbose=verbose)
 
     if 'md_params' in setup_dict.keys():
@@ -682,6 +762,7 @@ def setup_configs(path, verbose=True):
 
     return structure, md,
 
+
 def main():
     # load from config file
     config = load_config_yaml('input.yaml')
@@ -693,12 +774,11 @@ def main():
 
     structure = Structure_Config(config['structure_params'])
     print(struc_fig)
-    print(struc_fig._params)
 
     ml_fig = ml_config(params=config['ml_params'], print_warn=True)
     print(ml_fig)
 
-    md_fig = MD_Config(params=config['md_params'],warn=True)
+    md_fig = MD_Config(params=config['md_params'], warn=True)
     print(md_fig)
 
     hpc_fig = HPC_Config(params=config['hpc_params'])
