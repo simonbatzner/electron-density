@@ -7,13 +7,16 @@ import numpy.random as rand
 import numpy.linalg as la
 from sklearn.kernel_ridge import KernelRidge
 
+from parse import load_config_yaml, QE_Config, Structure_Config, ml_config,MD_Config
 from utility import first_derivative_2nd, first_derivative_4th
-from utility import
 mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855,'O':15.9994}
+from parse import *
 
 
-class MD_Engine(object):
-    def __init__(self, structure, md_config,qe_config,ml_model,hpc_config):
+
+
+class MD_Engine(MD_Config):
+    def __init__(self, structure, md_config,qe_config,ml_model,hpc_config=None):
         """
         Initialize the features of the system, which include:
         input_atoms: Atoms in the unit cell, list of objects of type Atom (defined later on in this notebook)
@@ -37,21 +40,12 @@ class MD_Engine(object):
         energy_or_force_driven: Maps to 'driver': dictates if the finite difference energy model drives the simulation
                                 or if the force comes directly from the model (such as with AIMD.)
         """
-        self.verbosity = md_config.get('verbosity',1)
-
-        self.dx = md_config.get('fd_dx',.1)
-        self.structure = structure
-        # self.ml_model = model
 
         # Set configurations
+        super(MD_Engine,self).__init__(md_config)
+        self.structure = structure
         self.qe_config = qe_config
         self.ml_model = ml_model
-        self.md_config = md_config
-        self.assert_boundaries = md_config.get('assert_boundaries',False)
-
-        self.fd_accuracy = None or md_config['fd_accuracy']
-
-        self.energy_or_force_driven = self.ml_model.energy_or_force
 
     def get_energy(self):
         """
@@ -61,8 +55,53 @@ class MD_Engine(object):
         self.Structure
         :return: float Energy of configuration
         """
-        return self.ml_model.get_energy(self.structure)
 
+        if self['mode']=='ML':
+            return self.ml_model.get_energy(self.structure)
+
+        if self['mode']=='AIMD':
+            result = self.qe_config.run_espresso()
+            return result['energy']
+        if self['mode']=='LJ':
+
+            eps = self['LJ_eps']
+            rm =  self['LJ_rm']
+            E = 0.
+            for at in self.structure:
+                for at2 in self.structure:
+                    if at.fingerprint != at2.fingerprint:
+                        disp = la.norm(at.position - at2.position)
+                        if self['verbosity']>=4:
+                            print('Current LJ disp between atoms is:', disp)
+
+                        E += .5 * eps * ((rm / disp) ** 12 - 2 * (rm / disp) ** 6)
+            return E
+
+
+    def set_forces(self):
+        if self['mode']=='AIMD':
+                results = self.qe_config.run_espresso(self.structure)
+
+                if self.verbosity == 4: print("E0:", results['energy'])
+
+                forces = results['forces']
+                for n, at in enumerate(self.structure):
+                    at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
+
+                return
+
+        elif self.mode=='LJ':
+            self.set_fd_forces()
+            pass
+
+        elif self.md_config['mode']=='ML':
+            if self.ml_model.type=='energy':
+                self.set_fd_forces()
+            elif self.ml_model.type=='force':
+                forces= self.ml_model.get_forces(self.structure)
+                for n, at in enumerate(self.structure):
+                    at.force = list(np.array(forces[n]) * 13.6 / 0.529177)
+                return
 
     def set_fd_forces(self):
         """
@@ -75,29 +114,18 @@ class MD_Engine(object):
         stores the forces output from ESPRESSO as the atomic forces.
         """
 
-        dx = self.md_config['fd_dx']
-        fd_accuracy = self.md_config['fd_accuracy']
+        dx = self.fd_dx
+        fd_accuracy = self['fd_accuracy']
 
         if self.energy_or_force_driven == "energy" and self.md_config.mode == "AIMD":
             print("WARNING! You are asking for an energy driven model with Ab-Initio MD;",
                   " AIMD is configured only to work on a force-driven basis.")
         """
-        if self.md_config['mode'] == 'AIMD':
-            results = qe_config.run_espresso(self.structure)
-
-            if self.verbosity == 4: print("E0:", results['energy'])
-
-            force_list = results['forces']
-            for n, at in enumerate(self.structure):
-                at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
-
-            return
+        
         """
 
-
-
-
-        E0 = self.get_energy(); if self.verbosity == 4: print('E0:', E0)
+        E0 = self.get_energy()
+        if self.verbosity == 4: print('E0:', E0)
 
         # Main loop of setting forces
         for atom in self.structure:
@@ -136,8 +164,6 @@ class MD_Engine(object):
         for at in self.structure:
             at.apply_constraint()
 
-
-
     #TODO
     def take_timestep(self,dt = None,method = None):
         """
@@ -146,25 +172,29 @@ class MD_Engine(object):
         a standard third-order Euler timestep incorporating information about the velocity and the force.
         """
 
-        self.update_atom_forces()
+        self.set_forces()
+        self.structure.record_trajectory(time=self.dt,force=True)
 
-        dt = dt or self.md_config['dt']
+        if self['verbosity'] >= 3:
+            print(self.get_report(forces=True))
+
+        dt = dt or self.dt
         dtdt = dt*dt
-        method = method or self.md_config["timestep_method"]
-        self.time += dt
 
-        temp_num = 0.
+        method = method or self["timestep_method"]
+        self['time'] += dt
+        self.frame += 1
 
         # Third-order euler method
         # Is a suggested way to begin a Verlet run, see:
         # https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
 
         if method == 'TO_Euler':
-            for atom in self.Structure.atom_list:
-                for coord in range(3):
-                    atom.prev_pos[coord] = np.copy(atom.position[coord])
-                    atom.position[coord] += atom.velocity[coord] * dt + atom.force[coord] * dt ** 2 / atom.mass
-                    atom.velocity[coord] += atom.force[coord] * dt / atom.mass
+            for atom in self.structure:
+                for i in range(3):
+                    atom.prev_pos[i] = np.copy(atom.position[i])
+                    atom.position[i] += atom.velocity[i] * dt + atom.force[i] * dtdt*.5 / atom.mass
+                    atom.velocity[i] += atom.force[i] * dt / atom.mass
 
         ######
         # Superior Verlet integration
@@ -172,21 +202,23 @@ class MD_Engine(object):
         ######
 
         elif method == 'Verlet':
-            for atom in self.Structure.atom_list:
-                for coord in range(3):
+            for atom in self.structure:
+                for i in range(3):
                     # Store the current position to later store as the previous position
                     # After using it to update the position
 
-                    temp_num = np.copy(atom.position[coord])
-                    atom.position[coord] = 2 * atom.position[coord] - atom.prev_pos[coord] + atom.force[
-                                                                                                 coord] * dtdt /(2* atom.mass)
-                    atom.velocity[coord] += atom.force[coord] * dt / atom.mass
-                    atom.prev_pos[coord] = np.copy(temp_num)
+                    temp_coord = np.copy(atom.position[i])
+                    atom.position[i] = 2 * atom.position[i] - atom.prev_pos[i] + \
+                                       atom.force[i] * dtdt*.5 /atom.mass
+                    atom.velocity[i] += atom.force[i] * dt / atom.mass
+                    atom.prev_pos[i] = np.copy(temp_coord)
                     if self.verbosity == 5: print("Just propagated a distance of ",
-                                                  atom.position[coord] - atom.prev_pos[coord])
+                                                  atom.position[i] - atom.prev_pos[i])
 
-        if self.assert_boundaries: self.assert_boundary_conditions()
-        if self.verbosity > 3: self.print_positions()
+        if self['assert_boundaries']:
+            self.assert_boundary_conditions()
+        self.structure.record_trajectory(time=self.dt,position=True)
+
 
     #TODO
     def setup_run(self):
@@ -198,26 +230,22 @@ class MD_Engine(object):
 
 
     #TODO
-    def run(self, tf, dt, ti=0):
+    def run(self):
         """
         Handles timestepping; at each step, calculates the force and then
         advances via the take_timestep method.
         """
 
-        # The very first timestep often doesn't have the 'previous position' to use,
-        # so the third-order Euler method starts us off using already-present
-        # information about the position, velocity (if provided) and force:
-
-        if self.time == 0:
-            self.take_timestep(dt=dt, method='TO_Euler')
+        if self['time'] == 0:
+            self.take_timestep(method='TO_Euler')
 
         # Primary iteration loop
         # Most details are handled in the timestep function
-        while self.time < tf:
+        while (self.time < self.get('tf',np.inf) and self['frame']<self.get('frames',np.inf)):
 
-            self.take_timestep(dt=dt)
+            self.take_timestep(method=self['timestep_method'])
 
-            if (self.model == 'GP' or self.model == 'KRR') and self.uncertainty_threshold > 0:
+            if (self.mode == 'ML'):
 
                 if self.gauge_model_uncertainty():
                     continue
@@ -228,52 +256,51 @@ class MD_Engine(object):
                     self.retrain_ml_model(self.model, self.ML_model)
                     self.take_timestep(dt=-dt)
 
-    #TODO
-    def assert_boundary_conditions(self):
-        """
-        We seek to have our atoms be entirely within the unit cell, that is,
-        for bravais lattice vectors a1 a2 and a3, we want our atoms to be at positions
+        self.end_run()
 
-         x= a a1 + b a2 + c a3
-         where a, b, c in [0,1)
+    #TODO: Implement end-run report
+    def end_run(self):
+        pass
 
-         So in order to impose this condition, we invert the matrix equation such that
-
-          [a11 a12 a13] [a] = [x1]
-          [a21 a22 a23] [b] = [x2]
-          [a31 a32 a33] [c] = [x3]
-
-          And if we find that a, b, c not in [0,1)e modulo by 1.
-        """
-        a1 = self.cell[0]
-        a2 = self.cell[1]
-        a3 = self.cell[2]
-
-        for atom in self.atoms:
-
-            coords = np.dot(la.inv(self.cell), atom.position)
-            if self.verbosity == 5:
-                print('Atom positions before BC check:', atom.position)
-                print('Resultant coords:', coords)
-
-            if any([coord > 1.0 for coord in coords]) or any([coord < 0.0 for coord in coords]):
-                if self.verbosity == 4: print('Atom positions before BC check:', atom.position)
-
-                atom.position = a1 * (coords[0] % 1) + a2 * (coords[1] % 1) + a3 * (coords[2] % 1)
-                if self.verbosity == 4: print("BC updated position:", atom.position)
-
-    #TODO
-    def print_positions(self, forces=True):
+    def get_report(self, forces=True, velocities=False):
         """
         Prints out the current positions of the atoms line-by-line,
         and also the forces
         """
-        print("T=", self.time)
-        for n in range(len(self.atoms)):
+        report ='Frame #:{},Time:{}\n'.format(self['frame'],np.round(self['time'],3))
+        report += 'Atom,Element,Position'
+        report += ',Force' if forces else ''
+        report += ',Velocity'if velocities else ''
+        report += '\n'
+        for n, at in enumerate(self.structure):
 
-            pos = self.atoms[n].position
-            force = self.atoms[n].force
-            if forces:
-                print('Atom %d:' % n, np.round(pos, decimals=4), ' Force:', np.round(force, decimals=6))
-            else:
-                print('Atom %d:' % n, np.round(pos, decimals=4))
+
+            report+= '{},{},{}{}{} \n'.format(n,at.element,str(tuple([np.round(x,4) for x in at.position])),
+                     ','+str(tuple([np.round(v,4) for v in at.velocity])) if velocities else '',
+                     ',' + str(tuple([np.round(f, 4) for f in at.force])) if forces else '')
+
+        return report
+
+
+def main():
+    pass
+
+if __name__ == '__main__':
+    main()
+
+
+
+
+
+config = load_config_yaml('H2_test.yaml')
+print(config)
+qe_conf = QE_Config(config['qe_params'], warn=True)
+structure = Structure_Config(config['structure_params']).to_structure()
+ml_fig = ml_config(params=config['ml_params'], print_warn=True)
+md_fig = MD_Config(params=config['md_params'], warn=True)
+
+a = MD_Engine(structure, md_fig, qe_conf, ml_fig)
+
+print(structure)
+
+a.run()

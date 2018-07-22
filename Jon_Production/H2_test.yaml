@@ -1,0 +1,89 @@
+
+structure_params:
+  alat: 5.0
+  #frac_pos:
+  #  - ['H', [.25,.25,.25]]
+  #  - ['H', [.75,.75,.75]]
+  pos:                  # CANNOT HAVE BOTH
+    - ['H', [2.5,2.5,2.5]]   # CANNOT HAVE BOTH
+    - ['H', [3.5,2.5,2.5]]
+  lattice:
+    - [1,0,0]
+    - [0,1,0]
+    - [0,0,1]
+  perturbation_size: .05
+
+
+md_params:
+
+  name: Steven
+  comment: This is a test of the yaml framework.
+
+  mode: LJ   # ML | AIMD | LJ
+
+  ti: 0.0
+  frames: 50
+  mass: 1.0   # Set as an array if multiple atomic species, or 0 for automatic setting by element
+  verbosity : 3
+  fd_dx: .1
+  dt: .1
+  assert_boundaries: False
+  timestep_method: 'Verlet'
+
+  LJ_eps : 1.0
+  LJ_rm : 1.0
+  fd_accuracy: 4
+
+  write_outfile: 'H2_test.out'
+
+  energy_or_force: 'Energy' # 'Energy' | 'Force | 'Both'
+
+
+
+ml_params:
+
+  regression_model: GP
+
+  gp_params:
+    length_scale: 1
+    length_scale_min: 1e-5
+    length_scale_max: 1e5
+
+    threshold_params:
+      force_conv: 25.71104309541616
+      thresh_perc: .2
+
+  fingerprint_params:
+    eta_lower: 0
+    eta_upper: 2
+    eta_length: 10
+    cutoff: 8
+
+
+qe_params:
+  ecut: 18.0
+  nk: 4.0
+  sc_dim : 3
+  npool: 36
+  system_name: 'AIMD'
+
+  pseudo_dir : '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
+  outdir: '/n/home03/jonpvandermause/Production'
+  pw_command :  '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
+  in_file :  'scf_13.in'
+  out_file : 'scf_13.out'
+  update_name : 'update_13.txt'
+  correction_folder: ''
+  molecule: False
+
+  parallelization:
+    np: 1
+    nk: 0
+    nt: 0
+    nd: 0
+    ni: 0
+
+
+hpc_params:
+  processes: 360
+  par: 1
