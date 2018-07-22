@@ -38,6 +38,10 @@ class dotdict(dict):
 
 
 
+# ------------------------------------------------------
+#              ML Config
+# ------------------------------------------------------
+
 
 class ml_config(dict):
     """
@@ -224,6 +228,8 @@ class Structure(list):
         self.lattice = lattice
         self.fractional = fractional
 
+        self.trajectory={}
+
         super(Structure, self).__init__(self.atoms)
 
     def get_pprint_atoms(self):
@@ -307,7 +313,6 @@ class Structure(list):
 
                 atom.position = a1 * (coords[0] % 1) + a2 * (coords[1] % 1) + a3 * (coords[2] % 1)
                 if verbosity == 4: print("BC updated position:", atom.position)
-
 
 
 class Structure_Config(dict):
@@ -416,6 +421,34 @@ class Structure_Config(dict):
         return Structure(atoms=atoms, alat=self['alat'], lattice=self['lattice'], fractional=self.fractional)
 
 
+def ase_to_structure(struc,alat,fractional,perturb=0):
+    """
+    Quick helper function which turns an ASE structure
+    to a PyFly one. Warning: You must specify if the structure is specified
+    in fractional coordinates, and if a scalaing factor by alat is necessary.
+    You must also import ASE yourself.
+
+    :param struc: ASE Structure object
+    :param alat (float): scaling factor for lattice
+    :param fractional (bool): Flag to handle if the atomic positions
+            are in fractional coordintes
+    :return:
+    """
+    positions = struc.get_positions()
+    symbols = struc.get_chemical_symbols()
+    lattice = b.get_cell
+
+    atoms=[]
+    for n in range(len(positions)):
+        atoms.append(Atom(position=positions[n],element=symbols[n]))
+
+    #TODO ADD THIS
+    if perturb>0:
+        pass
+
+
+    return Structure(atoms,alat=alat,lattice=np.array(lattice),fractional=fractional)
+
 
 
 # ------------------------------------------------------
@@ -423,10 +456,6 @@ class Structure_Config(dict):
 # ------------------------------------------------------
 
 # Object to load in and validate parsed QE settings
-
-
-
-# Object to handle QE
 class QE_Config(dict):
     """
     Contains parameters which configure Quantum ESPRESSO pwscf runs,
@@ -442,6 +471,9 @@ class QE_Config(dict):
         qe = self
 
 
+        qe_defaults={'system_name':'QE','pw_command':os.environ.get('PWSCF_COMMAND'),
+                     'parallelization':{'np': 1, 'nk': 0, 'nt': 0, 'nd': 0,
+                                                                              'ni': 0}}
         if not (qe.get('system_name', False)): self['system_name'] = 'QE'
         if not (qe.get('pw_command', False)): self['pw_command'] = os.environ.get('PWSCF_COMMAND')
         if not (qe.get('parallelization', False)): self['parallelization'] = {'np': 1, 'nk': 0, 'nt': 0, 'nd': 0,
