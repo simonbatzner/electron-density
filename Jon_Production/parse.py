@@ -312,7 +312,7 @@ class Structure(list):
 
     @property
     def n_atoms(self):
-        return len(self['positions'])
+        return len(self.atoms)
 
     @property
     def n_species(self):
@@ -496,6 +496,10 @@ class QE_Config(dict):
     as well as the methods to implement them.
     """
 
+    @property
+    def pwin(self):
+        return self['pwscf_input']
+
     def __init__(self, params={}, warn=False):
 
         self._params = ['nk', 'system_name',
@@ -509,27 +513,68 @@ class QE_Config(dict):
             self.update(params)
         qe = self
 
-        default_qe = {'system_name': 'QE', 'pw_command': os.environ.get('PWSCF_COMMAND'),
-                      'parallelization': {'np': 1, 'nk': 0, 'nt': 0, 'nd': 0, 'ni': 0}}
+        mandatory_params = ['nk', 'pw_command',
+                            'in_file']
+        mandatory_pw={'CONTROL':['pseudo_dir'],
+                    'SYSTEM':['ecutwfc','ecutrho']}
 
-        missing = []
+        #-------------------------
+        # Check for missing mandatory parameters
+        #-----------------------
 
-        for key in default_qe.keys():
-            if key not in self.keys():
-                missing.append(key)
-
-        for key in missing:
-            print("Achtung! Missing MD parameter, running model with default for: {}".format(missing))
-            self[key] = default_qe[key]
-
-        mandatory_params = ['ecut', 'nk', 'pw_command', 'pseudo_dir',
-                            'in_file', 'outdir']
+        missing_mand=False
         if warn and not all([qe.get(param, False) for param in mandatory_params]):
             print('WARNING! Some critical parameters which are needed for QE to work are not present!')
             for param in mandatory_params:
                 if not qe.get(param, False):
+                    missing_mand = True
                     print("Missing parameter ", param, '\n')
+
+        for card in ["CONTROL","SYSTEM"]:
+            if warn and not all([self['pwscf_input'][card].get(param, False) for param in mandatory_pw[card]]):
+                print('WARNING! Some critical parameters which are needed for QE to work are not present!')
+                for param in mandatory_pw[card]:
+                    if not self.pwin[card].get(param, False):
+                        missing = True
+                        print("Missing parameter in",card+':'+ param, '\n')
+
+        if missing_mand:
             raise Exception("Missing necessary QE parameters.")
+        #-------------------------
+        # Check for missing default parameters
+        #-----------------------
+
+        missing_params=[]
+        default_qe = {'system_name': 'QE', 'pw_command': os.environ.get('PWSCF_COMMAND'),
+                      'parallelization': {'np': 1, 'nk': 0, 'nt': 0, 'nd': 0, 'ni': 0}}
+
+
+
+        #Do higher-level missing parameters
+
+        for key in default_qe.keys():
+            if key not in self.keys():
+                missing_params.append(key)
+
+        for key in missing_params:
+            print("Achtung! Missing MD parameter, running model with default for: {}".format(missing))
+            self[key] = default_qe[key]
+
+        # Do pwscf.input-level missing parameters
+        default_pw = {'CONTROL': {'calculation': 'scf', 'disk_io': 'low', 'tprnfor': True,
+                                  'wf_collect': False},
+                      "ELECTRONS": {'diagonalization': 'david', 'mixing_beta': .5,
+                                    'conv_thr': 1.0e-7}}
+        missing_pw_params={'CONTROL':[], "ELECTRONS":[]}
+
+        for card in default_pw.keys():
+            for key in default_pw[card]:
+                if key not in self.pwin[card].keys():
+                    missing_pw_params[card].append(key)
+
+            for key in missing_pw_params[card]:
+                print("Achtung! Missing MD parameter, running model with default for: {}".format(key))
+                self.pwin[card][key] = default_pw[card][key]
 
         # ----------------
         # Set up K points
@@ -549,9 +594,11 @@ class QE_Config(dict):
         if type(nk) == type(list) and len(nk) > 3:
             self.kpts['offset'] = [nk[-3], nk[-2], nk[-1]]
 
-    @property
-    def pwin(self):
-        return self['pwscf_input']
+        for s in ['CONTROL', 'SYSTEM', 'ELECTRONS', 'IONS', 'CELL']:
+            if not self['pwscf_input'].get(s,False):
+                self['pwscf_input'][s] = {}
+
+
 
     def validate_against_structure(self, structure):
         """
@@ -606,10 +653,27 @@ class QE_Config(dict):
         output = parse_qe_pwscf_output(outfile=output_file)
         return output
 
-    def run_scf_from_text(self, scf_text, npool, out_file='pw.out', in_file='pw.in'):
+    def run_qe_pwscf(self,inpath,outdir, target='pwscf.out'):
 
-        # write input file
-        write_file(in_file, scf_text)
+
+        outpath = os.path.join(outdir,target)
+
+        pw_command = self.get('pw_command',os.environ['PWSCF_COMMAND'])
+
+        if self.get('serial',False):
+            pw_command = "{} < {} > {}".format(
+                pw_command, inpath, outpath)
+
+        else:
+            par_string=''
+            for par,val in self['parallelization'].items():
+                par_string += '-{} {}'.format(par,val) if val!=0 else ''
+            qe_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(pw_command, par_string, inpath, out_file)
+
+        run_command(qe_command)
+        return outpath
+
+    def run_scf_from_text(self, scf_text, npool, out_file='pw.out', in_file='pw.in'):
 
         # call qe
         qe_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(self['pw_loc'], npool, in_file, out_file)
@@ -630,7 +694,7 @@ class QE_Config(dict):
                 return '.true.'
             else:
                 return '.false.'
-        elif isinstance(value, (float, numpy.float)) or isinstance(value, (int, numpy.int)):
+        elif isinstance(value, (float, np.float)) or isinstance(value, (int, np.int)):
             return str(value)
         elif isinstance(value, str):
             return "'{}'".format(value)
@@ -682,15 +746,17 @@ class QE_Config(dict):
 
         # Write the CELL_PARAMETERS block
         inptxt += 'CELL_PARAMETERS {angstrom}\n'
-        for vector in structure['lattice']:
-            inptxt += ' {} {} {}\n'.format(*vector)
+        for vector in structure.lattice:
+            inptxt += ' {} {} {}\n'.format(vector[0],vector[1],vector[2])
 
         # Write the ATOMIC_POSITIONS in crystal coords
         inptxt += 'ATOMIC_POSITIONS {angstrom}\n'
-        for index, positions in enumerate(structure.positions):
-            inptxt += '  {} {:1.5f} {:1.5f} {:1.5f}'.format(positions[0], *positions[1])
+        for atom in structure:
+            inptxt += '  {} {:1.5f} {:1.5f} {:1.5f} \n'.format(atom.element, *atom.position)
 
-        infile = os.path.join(runpath.path, 'pwscf.in')
+        infile = os.path.join(runpath, 'pwscf.in')
+
+        print(inptxt)
         f = open(infile, 'w')
         f.write(inptxt)
         f.close()
@@ -766,20 +832,22 @@ def setup_configs(path, verbose=True):
 def main():
     # load from config file
     config = load_config_yaml('input.yaml')
-    print(config)
+    #print(config)
 
     # # set configs
     qe_conf = QE_Config(config['qe_params'], warn=True)
     print(qe_conf)
 
-    structure = Structure_Config(config['structure_params'])
+    structure = Structure_Config(config['structure_params']).to_structure()
     print(structure)
 
+    print(qe_conf.write_pwscf_input(structure,'.'))
+
     ml_fig = ml_config(params=config['ml_params'], print_warn=True)
-    print(ml_fig)
+    #print(ml_fig)
 
     md_fig = MD_Config(params=config['md_params'], warn=True)
-    print(md_fig)
+    #print(md_fig)
 
     hpc_fig = HPC_Config(params=config['hpc_params'])
 
