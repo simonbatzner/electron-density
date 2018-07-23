@@ -8,9 +8,9 @@ structure_params:
     - ['H', [2.5,2.5,2.5]]   # CANNOT HAVE BOTH
     - ['H', [3.5,2.5,2.5]]
   lattice:
-    - [1,0,0]
-    - [0,1,0]
-    - [0,0,1]
+    - [5,0,0]
+    - [0,5,0]
+    - [0,0,5]
   perturbation_size: .05
 
 
@@ -19,7 +19,7 @@ md_params:
   name: Steven
   comment: This is a test of the yaml framework.
 
-  mode: LJ   # ML | AIMD | LJ
+  mode: AIMD   # ML | AIMD | LJ
 
   ti: 0.0
   frames: 100
@@ -61,20 +61,20 @@ ml_params:
 
 
 qe_params:
-  ecut: 18.0
-  nk: 4
-  sc_dim : 3
-  npool: 36
-  system_name: 'AIMD'
+  nk: 1
+  system_name: 'H2'
 
-  pseudo_dir : '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
-  outdir: '/n/home03/jonpvandermause/Production'
-  pw_command :  '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
-  in_file :  'scf_13.in'
-  out_file : 'scf_13.out'
-  update_name : 'update_13.txt'
+  pw_command :  '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0/bin/pw.x'
+  in_file :  'pwscf.in'
+  out_file : 'pwscf.out'
+
+  update_name : ''
   correction_folder: ''
-  molecule: False
+
+
+  ecut_rhofactor: 8
+
+  serial: True
 
   parallelization:
     np: 1
@@ -82,6 +82,33 @@ qe_params:
     nt: 0
     nd: 0
     ni: 0
+
+  species_pseudo:
+    H: 'H.pbe-kjpaw.UPF'
+    Si: 'Si.rel-pbe-rrkj.UPF'
+    Al: 'Al.pz-vbc.UPF'
+
+  pwscf_input:
+    CONTROL:
+      pseudo_dir : '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0/pseudo'
+      outdir: '.'
+      calculation: 'scf'
+      disk_io: 'low'
+      tprnfor: True
+      wf_collect: False
+
+    SYSTEM:
+      ecutwfc: 50
+      ecutrho: 100
+
+      #occupations: 'smearing'
+      #smearing: 'mp'
+      #degauss: 0.02
+
+    ELECTRONS:
+      diagonalization: 'david'
+      mixing_beta: 0.5
+      conv_thr: .0000001
 
 
 hpc_params:

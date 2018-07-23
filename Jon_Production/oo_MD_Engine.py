@@ -12,7 +12,6 @@ from utility import first_derivative_2nd, first_derivative_4th
 mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994}
 
 
-# noinspection PyPep8Naming
 class MD_Engine(MD_Config):
     def __init__(self, structure, md_config, qe_config, ml_model, hpc_config=None):
         """
@@ -231,6 +230,10 @@ class MD_Engine(MD_Config):
         :return:
         """
 
+        #TODO INCLUDE STUFF ABOUT AUGMENTATION DIRECTORIES
+        # ENSURE THEY LINE UP BETWEEN QE_CONFIG AND ML_CONFIG
+        self.qe_config.validate_against_structure(self.structure)
+
     # TODO
     def run(self):
         """
@@ -257,7 +260,7 @@ class MD_Engine(MD_Config):
                     continue
                 else:
                     # print("Timestep with unacceptable uncertainty detected! \n Rewinding one step, and calling espresso to re-train the model.")
-                    self.qe_config.run_espresso(self.atoms, self.cell,
+                    self.qe_config.run_espresso(self.structure, self.cell,
                                                 iscorrection=True)
                     self.retrain_ml_model(self.model, self.ML_model)
                     self.take_timestep(dt=-dt)

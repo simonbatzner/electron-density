@@ -619,6 +619,9 @@ class QE_Config(dict):
                 print("WARNING! A pseudopotential file is not"
                       "specified for the species ", species)
 
+
+        return True
+
     def as_dict(self):
         d = dict(self)
         d["@module"] = self.__class__.__module__
@@ -648,7 +651,7 @@ class QE_Config(dict):
         prepare_dir(runpath)
         self.write_pwscf_input(structure, runpath)
 
-        # UNFINISHED BELOW THIS LINE
+        # STILL PATCHY BELOW THIS LINE
 
         output_file = self.execute_qe_pwscf(runpath, runpath)
 
@@ -719,8 +722,7 @@ class QE_Config(dict):
             print("WARNING! ")
             raise Exception("Quantum ESPRESSO parser failed to read the file {}. Run failed.".format(outfile))
 
-        result = {'energy': total_energy, 'kpoints': kpoints, 'volume': volume, 'positions': positions,
-                  'walltime': walltime}
+        result = {'energy': total_energy, 'kpoints': kpoints, 'volume': volume, 'positions': positions}
         if forces:
             result['forces'] = forces
         if total_force is not None:
@@ -745,7 +747,6 @@ class QE_Config(dict):
                 par_string += '-{} {}'.format(par, val) if val != 0 else ''
             pw_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(pw_command, par_string, inpath, out_file)
 
-        print(pw_command)
         run_command(pw_command)
         return outpath
 
@@ -832,7 +833,6 @@ class QE_Config(dict):
 
         infile = os.path.join(runpath, self['in_file'])
 
-        print(inptxt)
         f = open(infile, 'w')
         f.write(inptxt)
         f.close()
