@@ -12,6 +12,7 @@ from utility import first_derivative_2nd, first_derivative_4th
 mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994}
 
 
+# noinspection PyPep8Naming
 class MD_Engine(MD_Config):
     def __init__(self, structure, md_config, qe_config, ml_model, hpc_config=None):
         """
@@ -31,13 +32,14 @@ class MD_Engine(MD_Config):
         self.structure = structure
         self.qe_config = qe_config
         self.ml_model = ml_model
-
+        self.hpc_config = hpc_config
 
         # Contains info on each frame according to wallclock time
         # and configuration
-        self.system_trajectory  = []
+        self.system_trajectory = []
         self.augmentation_steps = []
 
+    # noinspection PyPep8Naming
     def get_energy(self):
         """
         Check mode option; if ML, use regression model to get energy.
@@ -64,8 +66,8 @@ class MD_Engine(MD_Config):
                         disp = la.norm(at.position - at2.position)
                         if self['verbosity'] >= 4:
                             print('Current LJ disp between atoms is:', disp)
-                        if self['verbosity']==5:
-                            print("LJ Energy of the pair is ",.5 * eps * ((rm / disp) ** 12 - 2 * (rm / disp) ** 6))
+                        if self['verbosity'] == 5:
+                            print("LJ Energy of the pair is ", .5 * eps * ((rm / disp) ** 12 - 2 * (rm / disp) ** 6))
                         E += .5 * eps * ((rm / disp) ** 12 - 2 * (rm / disp) ** 6)
             return E
 
@@ -98,6 +100,7 @@ class MD_Engine(MD_Config):
                     at.force = list(np.array(forces[n]) * 13.6 / 0.529177)
                 return
 
+    # noinspection PyPep8Naming,PyPep8Naming,PyPep8Naming,PyPep8Naming,PyPep8Naming,PyUnboundLocalVariable,PyUnboundLocalVariable
     def set_fd_forces(self):
         """
         Perturbs the atoms by a small amount dx in each direction
@@ -164,7 +167,7 @@ class MD_Engine(MD_Config):
             method (str): Choose one of Verlet or Third-Order Euler.
 
         """
-        tick=self.time
+        tick = self.time
         self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, force=True)
 
         if self['verbosity'] >= 3:
@@ -174,7 +177,6 @@ class MD_Engine(MD_Config):
         dtdt = dt * dt
 
         method = method or self["timestep_method"]
-
 
         # Third-order euler method, Is a suggested way to begin a Verlet run, see:
         # https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
@@ -214,8 +216,7 @@ class MD_Engine(MD_Config):
         self.frame += 1
         self.set_forces()
         tock = time.time()
-        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True,elapsed=tick-tock)
-
+        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, elapsed=tick - tock)
 
     # TODO Determine all of the necessary ingredients which may or may not be missing
     # TODO Info redundant or common to both should be checked here as well
@@ -229,8 +230,6 @@ class MD_Engine(MD_Config):
 
         :return:
         """
-
-
 
     # TODO
     def run(self):
@@ -250,7 +249,6 @@ class MD_Engine(MD_Config):
 
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
-
             self.take_timestep(method=self['timestep_method'])
 
             if self.mode == 'ML':
@@ -266,26 +264,25 @@ class MD_Engine(MD_Config):
 
         self.conclude_run()
 
-
     # TODO: Implement end-run report
     def conclude_run(self):
         print("===============================================================\n")
         print("Run concluded. Final positions and energy of configuration:\n")
-        print("Energy:", self.get_energy(),'\n')
+        print("Energy:", self.get_energy(), '\n')
         print(self.get_report(forces=True))
 
-
-
-
-    def get_report(self, forces=True, velocities=False,time_elapsed=0):
+    def get_report(self, forces=True, velocities=False, time_elapsed=0):
         """
         Prints out the current statistics of the atoms line by line.
 
         Args:
-            forces      (bool): Determines if forces will be printed.
-            velocities  (bool); Determines if velocities will be printed.
+
+            :param forces:      (bool) Determines if forces will be printed.
+            :param velocities:  (bool) Determines if velocities will be printed.
+            :param time_elapsed: (float) Puts elapsed time for a frame into the report
         """
-        report = 'Frame#:{},SystemTime:{},ElapsedTime{}:\n'.format(self['frame'], np.round(self['time'], 3),np.round(time_elapsed,3))
+        report = 'Frame#:{},SystemTime:{},ElapsedTime{}:\n'.format(self['frame'], np.round(self['time'], 3),
+                                                                   np.round(time_elapsed, 3))
         report += 'Atom,Element,Position'
         report += ',Force' if forces else ''
         report += ',Velocity' if velocities else ''
@@ -316,4 +313,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

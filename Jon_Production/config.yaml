@@ -1,0 +1,10 @@
+
+input_params:
+  md_params: ~
+
+  structure_params: ~
+    espresso_params: pseudo_dir: '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
+    outdir: '/n/home03/jonpvandermause/'
+    pw_loc: '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
+
+
