@@ -1,3 +1,4 @@
+
 structure_params:
   alat: 5.431
   frac_pos:
@@ -13,13 +14,20 @@ structure_params:
 
 
 md_params:
+
+  name: Steven
+  comment: This is a test of the yaml framework.
+
+  mode: AIMD   # ML | AIMD | LJ
+
+  ti: 0.0
   frames: 50
-  noa: 51
-  step: 20
-  mass: 28.0855   # Set as an array if multiple atomic species
+  mass: 28.0855   # Set as an array if multiple atomic species, or 0 for automatic setting by element
   verbosity : 1
   fd_dx: .1
+  dt: .1
   assert_boundaries: False
+  timestep_method: 'Verlet'
 
   fd_accuracy: 2
 
@@ -49,8 +57,7 @@ ml_params:
 
 qe_params:
   ecut: 18.0
-  nk: 4.0
-  sc_dim : 3
+  nk: 4
   npool: 36
   system_name: 'AIMD'
 
@@ -60,8 +67,14 @@ qe_params:
   in_file :  'scf_13.in'
   out_file : 'scf_13.out'
   update_name : 'update_13.txt'
-  correction_folder: '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/Jon_Production/'
-  molecule: False
+
+  correction_folder: ''
+
+
+  ecut_rhofactor: 8
+
+  serial: True
+
 
   parallelization:
     np: 1
@@ -69,6 +82,26 @@ qe_params:
     nt: 0
     nd: 0
     ni: 0
+
+  species_pseudo:
+    - H: 'H.pbe-kjpaw.UPF'
+    - Si: 'Si.rel-pbe-rrkj.UPF'
+    - Al: 'Al.pz-vbc.UPF'
+
+  pwscf_input:
+    CONTROL:
+      calculation': 'scf'
+      'disk_io': 'low'
+      'tprnfor': True
+      'wf_collect': False
+      'occupations': 'smearing'
+      'smearing': 'mp'
+      'degauss': 0.02
+
+    ELECTRONS:
+      'diagonalization': 'david'
+      'mixing_beta': 0.5
+      'conv_thr': 1e-7
 
 
 hpc_params:
