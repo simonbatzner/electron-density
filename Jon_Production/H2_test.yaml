@@ -69,7 +69,7 @@ qe_params:
   out_file : 'pwscf.out'
 
   update_name : ''
-  correction_folder: ''
+  correction_folder: '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/Jon_Production/'
 
 
   ecut_rhofactor: 8

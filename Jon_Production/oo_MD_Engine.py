@@ -1,11 +1,17 @@
-import numpy as np
-import os
-import sys
-import matplotlib.pyplot as plt
-import numpy.random as rand
-import numpy.linalg as la
-from sklearn.kernel_ridge import KernelRidge
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# pylint: disable=line-too-long, invalid-name, too-many-arguments
+
+""""
+
+Steven Torrisi
+"""
 import time as time
+import pprint
+
+import numpy as np
+import numpy.linalg as la
+
 from parse import load_config_yaml, QE_Config, Structure_Config, ml_config, MD_Config
 from utility import first_derivative_2nd, first_derivative_4th
 
@@ -38,6 +44,9 @@ class MD_Engine(MD_Config):
         self.system_trajectory = []
         self.augmentation_steps = []
 
+        # MD frame cnt, corresponds to DFT data in correction folder
+        self.frame_cnt = 0
+
     # noinspection PyPep8Naming
     def get_energy(self):
         """
@@ -52,8 +61,10 @@ class MD_Engine(MD_Config):
             return self.ml_model.get_energy(self.structure)
 
         if self['mode'] == 'AIMD':
-            result = self.qe_config.run_espresso()
+
+            result = self.qe_config.run_espresso(cnt=self.frame_cnt)
             return result['energy']
+
         if self['mode'] == 'LJ':
 
             eps = self['LJ_eps']
@@ -72,12 +83,14 @@ class MD_Engine(MD_Config):
 
     def set_forces(self):
         """
-        Check mode option; if ML, use regression model to get forces.
-        If AIMD, call ESPRESSO and report forces.
+        Check mode option; if ML, use regression model to get forces, if AIMD, call ESPRESSO and report forces.
         If LJ, compute the Lennard-Jones forces of the configuration by finite differences.
         """
+
+        # run espresso
         if self['mode'] == 'AIMD':
-            results = self.qe_config.run_espresso(self.structure)
+
+            results = self.qe_config.run_espresso(self.structure, cnt=self.frame_cnt)
 
             if self.verbosity == 4: print("E0:", results['energy'])
 
@@ -86,17 +99,25 @@ class MD_Engine(MD_Config):
 
             return
 
+        # compute Lennard Jones
         elif self.mode == 'LJ':
+
             self.set_fd_forces()
             pass
 
+        # run regression model
         elif self.md_config['mode'] == 'ML':
+
             if self.ml_model.type == 'energy':
                 self.set_fd_forces()
+
             elif self.ml_model.type == 'force':
+
                 forces = self.ml_model.get_forces(self.structure)
+
                 for n, at in enumerate(self.structure):
                     at.force = list(np.array(forces[n]) * 13.6 / 0.529177)
+
                 return
 
     # noinspection PyPep8Naming,PyPep8Naming,PyPep8Naming,PyPep8Naming,PyPep8Naming,PyUnboundLocalVariable,PyUnboundLocalVariable
@@ -230,7 +251,7 @@ class MD_Engine(MD_Config):
         :return:
         """
 
-        #TODO INCLUDE STUFF ABOUT AUGMENTATION DIRECTORIES
+        # TODO INCLUDE STUFF ABOUT AUGMENTATION DIRECTORIES
         # ENSURE THEY LINE UP BETWEEN QE_CONFIG AND ML_CONFIG
         self.qe_config.validate_against_structure(self.structure)
 
@@ -260,7 +281,7 @@ class MD_Engine(MD_Config):
                     continue
                 else:
                     # print("Timestep with unacceptable uncertainty detected! \n Rewinding one step, and calling espresso to re-train the model.")
-                    self.qe_config.run_espresso(self.structure, self.cell,
+                    self.qe_config.run_espresso(self.structure, self.cell, cnt=self.frame_cnt,
                                                 iscorrection=True)
                     self.retrain_ml_model(self.model, self.ML_model)
                     self.take_timestep(dt=-dt)
@@ -300,18 +321,28 @@ class MD_Engine(MD_Config):
 
 
 def main():
+    # setup
     config = load_config_yaml('H2_test.yaml')
-    print(config)
-    qe_conf = QE_Config(config['qe_params'], warn=True)
-    structure = Structure_Config(config['structure_params']).to_structure()
-    ml_fig = ml_config(params=config['ml_params'], print_warn=True)
-    md_fig = MD_Config(params=config['md_params'], warn=True)
 
-    a = MD_Engine(structure, md_fig, qe_conf, ml_fig)
+    # qe
+    qe_config = QE_Config(config['qe_params'], warn=True)
 
-    print(structure)
+    # # pprint.pprint(qe_config)
+    #
+    struc_config = Structure_Config(config['structure_params']).to_structure()
+    qe_config.run_espresso(struc_config, augment_db=True)
+    # # pprint.pprint(struc_config)
+    #
+    # ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
+    # # pprint.pprint(ml_config_)
+    #
+    # md_config = MD_Config(params=config['md_params'], warn=True)
+    # # pprint.pprint(md_config)
 
-    a.run()
+    # engine = MD_Engine(struc_config, md_config, qe_config, ml_config_)
+    # print(engine)
+    #
+    # engine.run()
 
 
 if __name__ == '__main__':
