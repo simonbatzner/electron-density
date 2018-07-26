@@ -39,6 +39,10 @@ ml_params:
 
   regression_model: GP
 
+  sklearn: False
+
+  training_dir: None
+
   gp_params:
     length_scale: 1
     length_scale_min: 1e-5

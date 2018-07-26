@@ -52,9 +52,6 @@ def parse_output(filename, target):
     elif target == 'e':
         raise ValueError("Not implemented yet. Stay tuned.")
 
-    elif target == 'fe':
-        raise ValueError("Not implemented yet. Stay tuned.")
-
     else:
         raise ValueError("No proper ML target defined.")
 
@@ -65,7 +62,7 @@ class RegressionModel:
     """Base class for regression models"""
 
     def __init__(self, model, training_data, test_data, correction_folder,
-                 training_folder, model_type, target, verbosity):
+                 training_folder, model_type, target, force_conv, thresh_perc, verbosity):
         """
         Initialization
         """
@@ -77,7 +74,10 @@ class RegressionModel:
         self.verbosity = verbosity
         self.training_folder = training_folder
         self.correction_folder = correction_folder
+        self.force_conv = force_conv
+        self.thresh_perc = thresh_perc
         self.aug_files = []
+        self.err_thresh = None
 
     def upd_database(self, cutoff, eta_lower, eta_upper, eta_length, brav_mat, brav_inv, vec1, vec2, vec3):
         """
@@ -96,11 +96,32 @@ class RegressionModel:
                                       eta_length=eta_length, brav_mat=brav_mat, brav_inv=brav_inv, vec1=vec1,
                                       vec2=vec2, vec3=vec3)
 
-    def init_database(self):
+    def init_database(self, cutoff, eta_lower, eta_upper, eta_length, brav_mat, brav_inv, vec1, vec2, vec3):
         """
         Init training database from directory
         """
-        pass
+        for file in get_files(self.training_folder):
+
+            positions, forces = parse_output(file, target=self.target)
+
+            for pos, f in zip(positions, forces):
+                self.aug_and_norm(pos=pos, forces=f, cutoff=cutoff, eta_lower=eta_lower, eta_upper=eta_upper,
+                                  eta_length=eta_length, brav_mat=brav_mat, brav_inv=brav_inv, vec1=vec1,
+                                  vec2=vec2, vec3=vec3)
+
+        self.set_error_threshold()
+
+    def set_error_threshold(self):
+        """
+        Set threshold for predictive variance
+        :return:
+        """
+        # TODO: this should be set in first MD frame, then only compared against
+        if self.err_thresh is None:
+            self.err_thresh = self.thresh_perc * np.mean(
+                np.abs(np.array(self.training_data['forces']) * self.force_conv))
+        else:
+            return
 
     def aug_and_norm(self, pos, forces, cutoff, eta_lower, eta_upper, eta_length,
                      brav_mat, brav_inv, vec1, vec2, vec3):
@@ -186,7 +207,8 @@ class GaussianProcess(RegressionModel):
 
     def __init__(self, training_data=None, test_data=None, kernel='rbf',
                  length_scale=1, length_scale_min=1e-5, length_scale_max=1e5, sigma=1, n_restarts=10,
-                 correction_folder='.', training_folder='.', target='f', verbosity=1, sklearn=False):
+                 correction_folder='.', training_folder='.', target='f', force_conv=25.71104309541616,
+                 thresh_perc=.2, verbosity=1, sklearn=False):
         """
         Initialization
         """
@@ -226,7 +248,8 @@ class GaussianProcess(RegressionModel):
 
         RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
                                  correction_folder=correction_folder, training_folder=training_folder,
-                                 model_type='gp', target=target, verbosity=verbosity)
+                                 model_type='gp', target=target, force_conv=force_conv, thresh_perc=thresh_perc,
+                                 verbosity=verbosity)
 
     def retrain(self, cutoff, eta_lower, eta_upper, eta_length, brav_mat, brav_inv, vec1, vec2, vec3):
         """
@@ -266,19 +289,32 @@ class GaussianProcess(RegressionModel):
             # get alpha and likelihood
             self.alpha = GP_SE_alpha(self.K, self.L, self.training_data['symm_norm'])
 
-    def inference(self):
+    def predict(self, structure, target='f'):
         """
         Predict on test data
         """
+        if target == 'f':
 
-        if self.sklearn:
-            # TODO: check this
-            self.pred, std = self.model.predict(self.test_data['symm_norm'], return_std=True)
-            self.pred_var = std ** 2
+            if self.sklearn:
+
+                # TODO: check this
+                self.pred, std = self.model.predict(self.test_data['symm_norm'], return_std=True)
+                self.pred_var = std ** 2
+
+            else:
+
+                # TODO: correct this
+                self.pred, self.pred_var = GP_SE_pred(self.test_data['symm_norm'], self.test_data['forces_norm'],
+                                                      self.K, self.L, self.alpha, self.sigma,
+                                                      self.length_scale, self.test_data)
+        elif target == 'e':
+            raise ValueError("Not implemented yet. Stay tuned.")
 
         else:
-            self.pred, self.pred_var = GP_SE_pred(self.test_data['symm_norm'], self.test_data['forces_norm'], self.K,
-                                                  self.L, self.alpha, self.sigma, self.length_scale, self.test_data)
+            raise ValueError("No proper ML target defined.")
+
+    def is_var_inbound(self):
+        return self.err_thresh > self.pred_var
 
 
 class KernelRidgeRegression(RegressionModel):
@@ -315,7 +351,7 @@ class KernelRidgeRegression(RegressionModel):
         """
         self.model.fit(self.training_data['symm_norm'], self.training_data['forces_norm'])
 
-    def inference(self):
+    def predict(self):
         """
         Predict on test data
         """

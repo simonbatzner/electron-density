@@ -73,6 +73,8 @@ class ml_config(dict):
 
         # default parameters for machine learning model
         default_ml = {'regression_model': 'GP',
+                      'sklearn': False,
+                      'training_dir': None,
                       'gp_params': {'length_scale': 1,
                                     'length_scale_min': 1e-5,
                                     'length_scale_max': 1e5,
@@ -427,7 +429,7 @@ class Structure_Config(dict):
         if self.get('pert_size', False):
             for atom in self.positions:
                 for pos in atom[1]:
-                    pos += numpy.random.normal(0, scale=self['pert_size'])
+                    pos += np.random.normal(0, scale=self['pert_size'])
 
         super(Structure_Config, self).__init__(self)
 
@@ -661,7 +663,7 @@ class QE_Config(dict):
         output_file = self.execute_qe_pwscf(runpath, runpath)
 
         output = self.parse_qe_pwscf_output(output_file)
-        
+
         return output
 
     @staticmethod
@@ -751,7 +753,7 @@ class QE_Config(dict):
             par_string = ''
             for par, val in self['parallelization'].items():
                 par_string += '-{} {}'.format(par, val) if val != 0 else ''
-            pw_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(pw_command, par_string, inpath, out_file)
+            pw_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(pw_command, par_string, inpath, outpath)
 
         run_command(pw_command)
         return outpath
@@ -916,20 +918,20 @@ def setup_configs(path, verbose=True):
 
 
 def main():
-    # load from config file
+    # # load from config file
     config = load_config_yaml('input.yaml')
     print(type(config))
-
+    #
     # # # set configs
     # qe_conf = QE_Config(config['qe_params'], warn=True)
-    # print(qe_conf)
+    # # print(qe_conf)
     #
     # structure = Structure_Config(config['structure_params']).to_structure()
-    # print(structure)
+    # # print(structure)
     #
     # print(qe_conf.run_espresso(structure))
     #
-    # # ml_fig = ml_config(params=config['ml_params'], print_warn=True)
+    # ml_fig = ml_config(params=config['ml_params'], print_warn=True)
     # # print(ml_fig)
     #
     # md_fig = MD_Config(params=config['md_params'], warn=True)

@@ -3,7 +3,6 @@
 # pylint: disable=line-too-long, invalid-name, too-many-arguments
 
 """"
-
 Steven Torrisi
 """
 import time as time
@@ -14,12 +13,13 @@ import numpy.linalg as la
 
 from parse import load_config_yaml, QE_Config, Structure_Config, ml_config, MD_Config
 from utility import first_derivative_2nd, first_derivative_4th
+from regression import GaussianProcess
 
 mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994}
 
 
 class MD_Engine(MD_Config):
-    def __init__(self, structure, md_config, qe_config, ml_model, hpc_config=None):
+    def __init__(self, structure, md_config, qe_config, ml_config, hpc_config=None):
         """
         Engine which drives accelerated molecular dynamics. Is of type MD_Config
         so that molecular dynamics options are referred to using self.attributes.
@@ -37,11 +37,23 @@ class MD_Engine(MD_Config):
 
         self.structure = structure
         self.qe_config = qe_config
-        self.ml_model = ml_model
+        self.ml_config = ml_config
         self.hpc_config = hpc_config
 
-        # Contains info on each frame according to wallclock time
-        # and configuration
+        # init regression model
+        # TODO make sure params for both sklearn and self-made are all there and not redudant
+        self.ml_model = GaussianProcess(length_scale=ml_config['length_scale'],
+                                        length_scale_min=ml_config['length_scale_min'],
+                                        length_scale_max=ml_config['length_scale_max'],
+                                        force_conv=ml_config['force_conv'],
+                                        thresh_perc=ml_config['thresh_perc'],
+                                        sklearn=ml_config['sklearn'])
+
+        # init training database for regression model
+        if ml_config['training_dir'] is not None:
+            self.ml_model.init_database()
+
+        # Contains info on each frame according to wallclock time and configuration
         self.system_trajectory = []
         self.augmentation_steps = []
 
@@ -62,7 +74,6 @@ class MD_Engine(MD_Config):
             return self.ml_model.get_energy(self.structure)
 
         if self['mode'] == 'AIMD':
-
             result = self.qe_config.run_espresso(cnt=self.frame_cnt)
             return result['energy']
 
@@ -93,7 +104,8 @@ class MD_Engine(MD_Config):
 
             results = self.qe_config.run_espresso(self.structure, cnt=self.frame_cnt)
 
-            if self.verbosity == 4: print("E0:", results['energy'])
+            if self.verbosity == 4:
+                print("E0:", results['energy'])
 
             for n, at in enumerate(self.structure):
                 at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
@@ -110,11 +122,10 @@ class MD_Engine(MD_Config):
         elif self.md_config['mode'] == 'ML':
 
             if self.ml_model.type == 'energy':
-                self.set_fd_forces()
+                self.ml_model.predict(structure=self.structure, target='e')
 
             elif self.ml_model.type == 'force':
-
-                forces = self.ml_model.get_forces(self.structure)
+                forces = self.ml_model.predict(structure=self.structure, target='f')
 
                 for n, at in enumerate(self.structure):
                     at.force = list(np.array(forces[n]) * 13.6 / 0.529177)
@@ -199,8 +210,8 @@ class MD_Engine(MD_Config):
 
         method = method or self["timestep_method"]
 
-        # Third-order euler method, Is a suggested way to begin a Verlet run, see:
-        # https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
+        # third-order euler method, Is a suggested way to begin a Verlet run
+        # see:  https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
 
         if method == 'TO_Euler':
             for atom in self.structure:
@@ -209,10 +220,8 @@ class MD_Engine(MD_Config):
                     atom.position[i] += atom.velocity[i] * dt + atom.force[i] * dtdt * .5 / atom.mass
                     atom.velocity[i] += atom.force[i] * dt / atom.mass
 
-        ######
-        # Superior Verlet integration
-        # Citation:  https://en.wikipedia.org/wiki/Verlet_integration
-        ######
+        # superior Verlet integration
+        # see:  https://en.wikipedia.org/wiki/Verlet_integration
 
         # Todo vectorize this
 
@@ -224,7 +233,7 @@ class MD_Engine(MD_Config):
 
                     temp_coord = np.copy(atom.position[i])
                     atom.position[i] = 2 * atom.position[i] - atom.prev_pos[i] + \
-                        atom.force[i] * dtdt * .5 / atom.mass
+                                       atom.force[i] * dtdt * .5 / atom.mass
                     atom.velocity[i] += atom.force[i] * dt / atom.mass
                     atom.prev_pos[i] = np.copy(temp_coord)
                     if self.verbosity == 5: print("Just propagated a distance of ",
@@ -259,31 +268,34 @@ class MD_Engine(MD_Config):
     # TODO
     def run(self):
         """
-        Handles timestepping; at each step, calculates the force and then
-        advances via the take_timestep method.
+        Compute forces, move timestep
         """
 
         self.set_forces()
+
+        if self.frame == 0:
+            self.ml_model.set_error_threshold()
+
         self.structure.record_trajectory(self.frame, self.time, position=True, force=True)
 
         if self['time'] == 0:
+            self.ml_model.set_error_threshold()
             self.take_timestep(method='TO_Euler')
 
-        # Primary iteration loop
-        # Most details are handled in the timestep function
-
+        # primary iteration loop - most details are handled in the timestep function
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
             self.take_timestep(method=self['timestep_method'])
 
             if self.mode == 'ML':
 
-                if self.gauge_model_uncertainty():
+                # check if predictice variance is smaller than threshold
+                if self.is_var_inbound():
                     continue
+
+                # if not, compute DFT, retrain model, move on
                 else:
-                    # print("Timestep with unacceptable uncertainty detected! \n Rewinding one step, and calling espresso to re-train the model.")
-                    self.qe_config.run_espresso(self.structure, self.cell, cnt=self.frame_cnt,
-                                                iscorrection=True)
+                    self.qe_config.run_espresso(self.structure, cnt=self.frame_cnt, augment_db=True)
                     self.retrain_ml_model(self.model, self.ML_model)
                     self.take_timestep(dt=-dt)
 
@@ -325,7 +337,6 @@ def main():
     # setup
     config = load_config_yaml('H2_test.yaml')
 
-    # qe
     qe_config = QE_Config(config['qe_params'], warn=True)
     # pprint.pprint(qe_config)
 
@@ -334,8 +345,9 @@ def main():
     # pprint.pprint(struc_config)
 
     ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
-    # # pprint.pprint(ml_config_)
-    #
+    print(ml_config_)
+    # pprint.pprint(ml_config_)
+
     md_config = MD_Config(params=config['md_params'], warn=True)
     # # pprint.pprint(md_config)
 
