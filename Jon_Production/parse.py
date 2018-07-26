@@ -1,14 +1,24 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# pylint: disable=line-too-long, invalid-name, too-many-arguments
+
+""""
+
+Steven Torrisi, simon Batzner
+"""
+
 import sys
 import os
-
-import yaml
-import numpy as np
-import numpy.random as random
 import pprint
 import time as time
+import yaml
+
+import numpy as np
+import numpy.random as random
 import numpy.linalg as la
+
+from util.util import prepare_dir
 from Jon_Production.utility import write_file, run_command
-from utility import prepare_dir
 
 
 # TODO: Move this to utility file once we're done with everything else
@@ -46,7 +56,6 @@ class dotdict(dict):
 class ml_config(dict):
     """
     Creates an ml_config object.
-
     Args:
         params (dict): A set of input parameters as a dictionary.
     """
@@ -97,7 +106,6 @@ class MD_Config(dotdict):
     """
     Creates an MD_Config object.
     Base class of MD Engine.
-
     Args:
         params (dict): A set of input parameters as a dictionary.
     """
@@ -211,7 +219,6 @@ class Structure(list):
     Class which stores list of atoms as well as information on the structure,
     which is acted upon by the MD engine.
     Parameterized by the structure_params object in the YAML input files.
-
     args:
     alat (float): Scaling factor for the lattice
     cell (3x3 nparray): Matrix of vectors which define the unit cell
@@ -323,16 +330,12 @@ class Structure(list):
         """
         We seek to have our atoms be entirely within the unit cell, that is,
         for bravais lattice vectors a1 a2 and a3, we want our atoms to be at positions
-
          x= a a1 + b a2 + c a3
          where a, b, c in [0,1)
-
          So in order to impose this condition, we invert the matrix equation such that
-
           [a11 a12 a13] [a] = [x1]
           [a21 a22 a23] [b] = [x2]
           [a31 a32 a33] [c] = [x3]
-
           And if we find that a, b, c not in [0,1)e modulo by 1.
         """
         a1 = self.lattice[0]
@@ -356,7 +359,6 @@ class Structure_Config(dict):
     Creates a Structure Config object, and runs validation on the
     possible parameters.
     Populated by dictionary loaded in from an input.yaml file.
-
     Used by the Structure class to instantiate itself.
     """
 
@@ -465,14 +467,12 @@ def ase_to_structure(struc, alat, fractional, perturb=0):
     to a PyFly one. Warning: You must specify if the structure is specified
     in fractional coordinates, and if a scaling factor by alat is necessary.
     You must also import ASE yourself.
-
     :param alat:
     :param fractional:
     :param struc: ASE Structure object
     :param fractional: Flag to handle if the atomic positions
             are in fractional coordinates
     :param perturb: Perturb atomic positions by a Gaussian with std.dev perturb
-
     :return:
     """
     positions = struc.get_positions()
@@ -512,15 +512,17 @@ class QE_Config(dict):
 
         if params is None:
             params = {}
+
         self._params = ['nk', 'system_name',
                         'pseudo_dir', 'outdir', 'pw_command', 'in_file',
-                        'out_file', 'update_name', 'augmentation_folder',
+                        'out_file', 'update_name', 'correction_folder',
                         'molecule', 'serial']
 
         super(QE_Config, self).__init__()
 
         if params:
             self.update(params)
+
         qe = self
 
         mandatory_params = ['nk', 'pw_command',
@@ -550,6 +552,7 @@ class QE_Config(dict):
 
         if missing_mand:
             raise Exception("Missing necessary QE parameters.")
+
         # -------------------------
         # Check for missing default parameters
         # -----------------------
@@ -587,16 +590,21 @@ class QE_Config(dict):
         # ----------------
         # Set up K points
         # ----------------
+
         nk = self['nk']
         if isinstance(nk, int) and (nk == 1 or nk == 0):
             option = 'gamma'
+
         elif isinstance(nk, list) and list([int(n) for n in nk]) == [1, 1, 1]:
             option = 'gamma'
+
         else:
             option = 'automatic'
 
         self.kpts = {'option': option, 'gridsize': [int(nk)] * 3 if (isinstance(nk, int) or isinstance(nk, float))
+
         else [nk[0], nk[1], nk[2]]}
+
         if type(nk) == type(list) and len(nk) > 3:
             self.kpts['offset'] = [nk[-3], nk[-2], nk[-1]]
 
@@ -608,8 +616,6 @@ class QE_Config(dict):
         """
         Tests to make sure that ESPRESSO will be able to run
         correctly for the structure which is provided.
-
-
         :param structure: Structure object
         :return bool: If ESPRESSO should be able to run with this structure
         """
@@ -619,7 +625,6 @@ class QE_Config(dict):
                 print("WARNING! A pseudopotential file is not"
                       "specified for the species ", species)
 
-
         return True
 
     def as_dict(self):
@@ -628,21 +633,22 @@ class QE_Config(dict):
         d["@class"] = self.__class__.__name__
         return d
 
-    def run_espresso(self, structure, augment_db=False):
+    def run_espresso(self, structure, cnt=np.random.randint(1e10), augment_db=False):
         """
         Sets up the directory where pwscf is to be run; then, calls pw.x.
         Changes depending on if an augmentation run is being called i.e. one which is
         going to be a part of a ML Regression model re-training later.
 
-        :param structure: structure object.
-        :param augment_db: (bool) True if run will be a part of future ML re-training.
+        :param structure:       structure object.
+        :param augment_db:      boolean, True if run will be a part of updated ML database
         :return:
         """
 
         if augment_db:
-            # SIMON- This is where you change things up depending on if it's an augmentation run
-            dirname = ''
-            pass
+
+            # update db
+            dirname = os.path.join(self['correction_folder'], 'db_update_' + str(cnt))
+            prepare_dir(dirname)
 
         else:
             dirname = 'temprun'
@@ -652,10 +658,10 @@ class QE_Config(dict):
         self.write_pwscf_input(structure, runpath)
 
         # STILL PATCHY BELOW THIS LINE
-
         output_file = self.execute_qe_pwscf(runpath, runpath)
 
         output = self.parse_qe_pwscf_output(output_file)
+        
         return output
 
     @staticmethod
@@ -781,7 +787,6 @@ class QE_Config(dict):
 
     def write_pwscf_input(self, structure, runpath):
         """Make input param string for PW
-
         args:
         structure (Structure object)
         runpath (str): path to where to write pwscf input file
@@ -861,6 +866,9 @@ class HPC_Config(dict):
 
 
 def load_config_yaml(path, verbose=True):
+    """"
+    Loads configuration from input.yaml,
+    """
     if not os.path.isfile(path) and verbose:
         raise OSError('Configuration file does not exist.')
 
@@ -910,22 +918,22 @@ def setup_configs(path, verbose=True):
 def main():
     # load from config file
     config = load_config_yaml('input.yaml')
-    # print(config)
+    print(type(config))
 
-    # # set configs
-    qe_conf = QE_Config(config['qe_params'], warn=True)
-    print(qe_conf)
-
-    structure = Structure_Config(config['structure_params']).to_structure()
-    print(structure)
-
-    print(qe_conf.run_espresso(structure))
-
-    # ml_fig = ml_config(params=config['ml_params'], print_warn=True)
-    # print(ml_fig)
-
-    md_fig = MD_Config(params=config['md_params'], warn=True)
-    print(md_fig)
+    # # # set configs
+    # qe_conf = QE_Config(config['qe_params'], warn=True)
+    # print(qe_conf)
+    #
+    # structure = Structure_Config(config['structure_params']).to_structure()
+    # print(structure)
+    #
+    # print(qe_conf.run_espresso(structure))
+    #
+    # # ml_fig = ml_config(params=config['ml_params'], print_warn=True)
+    # # print(ml_fig)
+    #
+    # md_fig = MD_Config(params=config['md_params'], warn=True)
+    # print(md_fig)
 
     # hpc_fig = HPC_Config(params=config['hpc_params'])
 

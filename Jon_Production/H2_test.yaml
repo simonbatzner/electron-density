@@ -19,7 +19,7 @@ md_params:
   name: Steven
   comment: This is a test of the yaml framework.
 
-  mode: AIMD   # ML | AIMD | LJ
+  mode: ML # ML | AIMD | LJ
 
   ti: 0.0
   frames: 100
@@ -64,12 +64,12 @@ qe_params:
   nk: 1
   system_name: 'H2'
 
-  pw_command :  '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0/bin/pw.x'
+  pw_command :  '/Users/simonbatzner1/Sci_Software/QE/qe-6.0/bin/pw.x'
   in_file :  'pwscf.in'
   out_file : 'pwscf.out'
 
   update_name : ''
-  correction_folder: ''
+  correction_folder: '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/Jon_Production/'
 
 
   ecut_rhofactor: 8
@@ -90,7 +90,7 @@ qe_params:
 
   pwscf_input:
     CONTROL:
-      pseudo_dir : '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0/pseudo'
+      pseudo_dir : '/Users/simonbatzner1/Sci_Software/QE/qe-6.0/pseudo'
       outdir: '.'
       calculation: 'scf'
       disk_io: 'low'

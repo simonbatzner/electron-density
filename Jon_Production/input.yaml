@@ -59,17 +59,19 @@ qe_params:
   nk: 4
   system_name: 'AIMD'
 
-  pw_command :  '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0/bin/pw.x'
-  in_file :  'pwscf.in'
-  out_file : 'pwscf.out'
+  pseudo_dir : '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
+  outdir: '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/Jon_Production/outtest'
+  pw_command :  '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
+  in_file :  'scf_13.in'
+  out_file : 'scf_13.out'
 
-  update_name : 'update_13.txt'
   correction_folder: ''
 
 
   ecut_rhofactor: 8
 
   serial: True
+
 
   parallelization:
     np: 1
