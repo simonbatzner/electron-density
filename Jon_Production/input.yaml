@@ -1,15 +1,15 @@
 
 structure_params:
   alat: 5.431
-  frac_pos:
+  pos:
     - ['Si', [0,0,0]]
-    - ['Si', [.25,.25,.25]]
+    - ['Si', [2,2,2]]
   #pos:                  # CANNOT HAVE BOTH
   #  - ['Si', [0,0,0]]   # CANNOT HAVE BOTH
   lattice:
-    - [0,.5,.5]
-    - [.5,0,.5]
-    - [.5,.5,1]
+    - [5,0,0]
+    - [0,5,0]
+    - [0,0,5]
   perturbation_size: .05
 
 
@@ -56,9 +56,7 @@ ml_params:
 
 
 qe_params:
-  ecut: 18.0
   nk: 4
-  npool: 36
   system_name: 'AIMD'
 
   pseudo_dir : '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
@@ -66,7 +64,6 @@ qe_params:
   pw_command :  '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
   in_file :  'scf_13.in'
   out_file : 'scf_13.out'
-  update_name : 'update_13.txt'
 
   correction_folder: ''
 
@@ -84,24 +81,31 @@ qe_params:
     ni: 0
 
   species_pseudo:
-    - H: 'H.pbe-kjpaw.UPF'
-    - Si: 'Si.rel-pbe-rrkj.UPF'
-    - Al: 'Al.pz-vbc.UPF'
+    H: 'H.pbe-kjpaw.UPF'
+    Si: 'Si.rel-pbe-rrkj.UPF'
+    Al: 'Al.pz-vbc.UPF'
 
   pwscf_input:
     CONTROL:
-      calculation': 'scf'
-      'disk_io': 'low'
-      'tprnfor': True
-      'wf_collect': False
-      'occupations': 'smearing'
-      'smearing': 'mp'
-      'degauss': 0.02
+      pseudo_dir : '/Users/steven/Documents/Schoolwork/CDMAT275/ESPRESSO/qe-6.0/pseudo'
+      outdir: '.'
+      calculation: 'scf'
+      disk_io: 'low'
+      tprnfor: True
+      wf_collect: False
+
+    SYSTEM:
+      ecutwfc: 10
+      ecutrho: 50
+
+      occupations: 'smearing'
+      smearing: 'mp'
+      degauss: 0.02
 
     ELECTRONS:
-      'diagonalization': 'david'
-      'mixing_beta': 0.5
-      'conv_thr': 1e-7
+      diagonalization: 'david'
+      mixing_beta: 0.5
+      conv_thr: .0000001
 
 
 hpc_params:
