@@ -202,7 +202,7 @@ class MD_Engine(MD_Config):
 
                     temp_coord = np.copy(atom.position[i])
                     atom.position[i] = 2 * atom.position[i] - atom.prev_pos[i] + \
-                                       atom.force[i] * dtdt * .5 / atom.mass
+                        atom.force[i] * dtdt * .5 / atom.mass
                     atom.velocity[i] += atom.force[i] * dt / atom.mass
                     atom.prev_pos[i] = np.copy(temp_coord)
                     if self.verbosity == 5: print("Just propagated a distance of ",
@@ -230,7 +230,7 @@ class MD_Engine(MD_Config):
         :return:
         """
 
-        #TODO INCLUDE STUFF ABOUT AUGMENTATION DIRECTORIES
+        # TODO INCLUDE STUFF ABOUT AUGMENTATION DIRECTORIES
         # ENSURE THEY LINE UP BETWEEN QE_CONFIG AND ML_CONFIG
         self.qe_config.validate_against_structure(self.structure)
 
