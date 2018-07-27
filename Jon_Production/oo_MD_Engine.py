@@ -340,9 +340,8 @@ def main():
     qe_config = QE_Config(config['qe_params'], warn=True)
     # pprint.pprint(qe_config)
 
-    struc_config = Structure_Config(config['structure_params']).to_structure()
+    structure = Structure_Config(config['structure_params']).to_structure()
     # qe_config.run_espresso(struc_config, augment_db=True)
-    # pprint.pprint(struc_config)
 
     ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
     print(ml_config_)
@@ -351,7 +350,7 @@ def main():
     md_config = MD_Config(params=config['md_params'], warn=True)
     # # pprint.pprint(md_config)
 
-    engine = MD_Engine(struc_config, md_config, qe_config, ml_config_)
+    engine = MD_Engine(structure, md_config, qe_config, ml_config_)
     # print(engine)
     #
     engine.run()
