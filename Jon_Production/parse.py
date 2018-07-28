@@ -4,7 +4,7 @@
 
 """"
 
-Steven Torrisi, simon Batzner
+Steven Torrisi, Simon Batzner
 """
 
 import sys
@@ -62,6 +62,8 @@ class ml_config(dict):
 
     def __init__(self, params, print_warn=True):
 
+        self._params = ['regression_model', 'gp_params', 'fingerprint_params',
+                        'training_folder', 'correction_folder']
         super(ml_config, self).__init__()
 
         # init with default
@@ -140,12 +142,6 @@ class MD_Config(dotdict):
         # If value was not specified, load in default values.
 
         if self.get('frames', False) and self.get('tf', False) and self.get('dt', False) and warn:
-            print("WARNING! Frames and final time specified;"
-                  " these two parameters cannot both exist. Pick either a number of timesteps"
-                  " or an automatically computed computer of timesteps.")
-            raise Exception("Number of frames and final time both specified.")
-
-        if self.get('frames', False) and self.get('tf', False) and self.get('dt', False):
             print("WARNING! Frames and final time specified;"
                   " these two parameters cannot both exist. Pick either a number of timesteps"
                   " or an automatically computed computer of timesteps.")
@@ -235,6 +231,7 @@ class Structure(list):
         self.species = [] or set(self.elements)
         self.alat = alat
         self.lattice = lattice
+        self.inv_lattice = la.inv(lattice)
         self.fractional = fractional
 
         self.trajectory = {}
@@ -311,6 +308,29 @@ class Structure(list):
 
         print("Warning! Element {} not found in structure".format(element))
         raise Exception("Tried to get mass of a species that didn't exist in structure.")
+
+    # TODO test this
+    def rewind(self, frame, current_frame=-1):
+        """
+
+        :param frame:  integer denoting which 'frame' to rewind the structure to
+        :param current_frame:  if not negative 1, will also re-set the 'head' of the structure
+                               and will erase all frames between the desired frame and the current frame
+
+        :return: frame, so that you can call as MD_Engine.frame= structure.rewind(frame,current_frame)
+        """
+        for n, at in enumerate(self.atoms):
+            at.position = self.trajectory[frame]['positions'][n]
+            at.force = self.trajectory[frame]['forces'][n]
+
+            if self.trajectory[frame]['velocities']:
+                at.velocity = self.trajectory[frame]['velocities'][n]
+
+        if current_frame != -1:
+            for m in range(frame + 1, current_frame + 1):
+                del self.trajectory[m]
+
+        return frame
 
     @property
     def symbols(self):
@@ -392,28 +412,24 @@ class Structure_Config(dict):
             self['lattice'] = np.array(self['lattice'])
             self['unit_cell'] = self['alat'] * np.array([self['lattice'][0], self['lattice'][1], self['lattice'][2]])
 
-        # TODO: ENSURE THAT FRACTIONAL POSITIONS ARE LOADED IN CORRECTLY
-        # RIGHT NOW IT ISN'T RIGHT
+        if self['lattice'].shape != (3, 3):
+            print("WARNING! Inappropriately shaped cell passed as input to structure!")
+            raise Exception('Lattice has shape', np.shape(self['lattice']))
 
         if self.get('pos', False) and self.get('frac_pos', False):
             print("Warning! Positions AND fractional positions were given--"
                   "This is not intended use! You must select one or the other in your input.")
             raise Exception("Fractional position AND Cartesian positions given.")
 
-        if self['lattice'].shape != (3, 3):
-            print("WARNING! Inappropriately shaped cell passed as input to structure!")
-            raise Exception('Lattice has shape', np.shape(self['lattice']))
-
         if self.get('frac_pos', False):
-            self.fractional = True
-            self.positions = self['frac_pos']
-        if self.get('pos', False):
-            self.fractional = False
-            self.positions = self['pos']
 
-        else:
-            self.fractional = True
-            self.positions = self['frac_pos']
+            for position in self['frac_pos']:
+                vec = position[1]
+                newpos = self['lattice'][0] * vec[0] + self['lattice'][1] * vec[1] + self['lattice'][2] * vec[2]
+                self.positions.append(list([position[0], newpos]))
+
+        if self.get('pos', False):
+            self.positions = self['pos']
 
         for atom in self.positions:
             self['elements'].append(atom[0])
@@ -427,15 +443,17 @@ class Structure_Config(dict):
         # TODO: add support for list of mass
 
         if self.get('pert_size', False):
-            for atom in self.positions:
-                for pos in atom[1]:
-                    pos += np.random.normal(0, scale=self['pert_size'])
-
+            for pos in self.positions:
+                for component in pos[1]:
+                    component += np.random.normal(0, scale=self['pert_size'])
+                    
         super(Structure_Config, self).__init__(self)
 
     def to_structure(self):
 
-        mass_dict = {'H': 1.0, 'C': 12.01, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994}
+        mass_dict = {'H': 1.0, 'C': 12.01, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994,
+                     'Pd': 106.42, 'Au': 196.96655, 'Ag':‎ 107.8682}
+
 
         atoms = []
         for n, pos in enumerate(self.positions):
@@ -460,7 +478,7 @@ class Structure_Config(dict):
             atoms.append(Atom(position=list(pos[1]), velocity=list(velocity), force=list(force),
                               mass=float(mass), element=pos[0]))
 
-        return Structure(atoms=atoms, alat=self['alat'], lattice=self['lattice'], fractional=self.fractional)
+        return Structure(atoms=atoms, alat=self['alat'], lattice=self['lattice'])
 
 
 def ase_to_structure(struc, alat, fractional, perturb=0):
@@ -614,6 +632,14 @@ class QE_Config(dict):
             if not self['pwscf_input'].get(s, False):
                 self['pwscf_input'][s] = {}
 
+        # --------------
+        # Augmentation DB Options
+        # ---------------
+        if self.get('store_all', False):
+            self.store_always = True
+        else:
+            self.store_always = False
+
     def validate_against_structure(self, structure):
         """
         Tests to make sure that ESPRESSO will be able to run
@@ -627,6 +653,7 @@ class QE_Config(dict):
                 print("WARNING! A pseudopotential file is not"
                       "specified for the species ", species)
 
+                return False
         return True
 
     def as_dict(self):
@@ -635,7 +662,7 @@ class QE_Config(dict):
         d["@class"] = self.__class__.__name__
         return d
 
-    def run_espresso(self, structure, cnt=np.random.randint(1e10), augment_db=False):
+    def run_espresso(self, structure, cnt=-1, augment_db=False):
         """
         Sets up the directory where pwscf is to be run; then, calls pw.x.
         Changes depending on if an augmentation run is being called i.e. one which is
@@ -646,8 +673,10 @@ class QE_Config(dict):
         :return:
         """
 
-        if augment_db:
-
+        if augment_db or self.store_always:
+            if cnt == -1:
+                print("Warning! Augmentation run is being called but an index was not specified."
+                      "Something is wrong. This will not augment the database the way you hope to.")
             # update db
             dirname = os.path.join(self['correction_folder'], 'db_update_' + str(cnt))
             prepare_dir(dirname)
@@ -758,9 +787,19 @@ class QE_Config(dict):
         run_command(pw_command)
         return outpath
 
-    def run_scf_from_text(self, scf_text, npool, out_file='pw.out', in_file='pw.in'):
+    # LEGACY CODE @JON
+    def run_scf_from_text(self, scf_text, npool=1, out_file='pw.out', in_file='pw.in'):
+        """
+        Legacy code from Jon's earlier scripts
 
+        :param scf_text:
+        :param npool:
+        :param out_file:
+        :param in_file:
+        :return:
+        """
         # call qe
+        write_file(in_file, scf_text)
         qe_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(self['pw_loc'], npool, in_file, out_file)
         run_command(qe_command)
 
