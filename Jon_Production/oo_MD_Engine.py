@@ -48,6 +48,8 @@ class MD_Engine(MD_Config):
         # MD frame cnt, corresponds to DFT data in correction folder
         self.frame_cnt = 0
 
+
+
     # noinspection PyPep8Naming
     def get_energy(self):
         """
@@ -63,7 +65,7 @@ class MD_Engine(MD_Config):
 
         if self['mode'] == 'AIMD':
 
-            result = self.qe_config.run_espresso(cnt=self.frame_cnt)
+            result = self.qe_config.run_espresso()
             return result['energy']
 
         if self['mode'] == 'LJ':
@@ -180,20 +182,20 @@ class MD_Engine(MD_Config):
 
     def take_timestep(self, dt=None, method=None):
         """
-        Obtain the force at the current time, propagate forward in time by dt using
-        specified method.
+        Propagate forward in time by dt using
+        specified method, then update forces.
 
         Args:
             dt (float)  : Defaults to specified in input, timestep duration
             method (str): Choose one of Verlet or Third-Order Euler.
 
         """
-        tick = self.time
-        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, force=True)
-
+        tick = time.time()
         if self['verbosity'] >= 3:
             print(self.get_report(forces=True))
 
+        # TODO: Make sure that this works when dt is negative,
+        # rewind function will do this nicely
         dt = dt or self.dt
         dtdt = dt * dt
 
@@ -233,11 +235,13 @@ class MD_Engine(MD_Config):
         if self['assert_boundaries']:
             self.assert_boundary_conditions()
 
-        self['time'] += dt
+        self.time += dt
         self.frame += 1
         self.set_forces()
+
         tock = time.time()
-        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, elapsed=tick - tock)
+
+        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, elapsed= tock - tick)
 
     # TODO Determine all of the necessary ingredients which may or may not be missing
     # TODO Info redundant or common to both should be checked here as well
@@ -251,41 +255,80 @@ class MD_Engine(MD_Config):
 
         :return:
         """
-
-        # TODO INCLUDE STUFF ABOUT AUGMENTATION DIRECTORIES
-        # ENSURE THEY LINE UP BETWEEN QE_CONFIG AND ML_CONFIG
         self.qe_config.validate_against_structure(self.structure)
 
-    # TODO
-    def run(self):
+        # ------------------
+        # Check consistency of correction folders
+        # ------------------
+        qe_corr = False
+        ml_corr = False
+
+        if self.mode=='ML':
+
+            if self.qe_config.get('correction_folder',False):
+                qe_corr = True
+            if self.ml_model.correction_folder:
+                ml_corr = True
+            if ml_corr and qe_corr:
+                if self.qe_config['correction_folder']!= self.ml_model.correction_folder:
+                    print("WARNING!!! Correction folder is inconsistent between the QE config and the ML config!"
+                          "This is very bad-- the ML model will not get any better and this will result in a loop")
+                    raise Exception("Mismatch between qe config correction folder and ML config.")
+            if ml_corr and not qe_corr:
+                self.qe_config['correction_folder'] = self.ml_model.correction_folder
+            if qe_corr and not ml_corr:
+                self.ml_model.correction_folder = self.qe_config['correction_folder']
+
+        # ---------------------------------------------------
+        # Check to see if DB exists for ML model, begin if not
+        # ----------------------------------------------------
+
+        #TODO @SIMON  Here is where it should check to see if the training set is size 0
+        # and if it is, to run espresso
+        # THIS IS SCRATCH CODE WHICH ROUGHLY DETAILS THE OUTLINE, change this up
+        if self.mode=="ML" and self.ml_model.attribute_for_has_training_set:
+
+            self.frame_cnt=0
+            results = self.run_espresso(self.structure, cnt=0, augment_db=True)
+            self.structure.set_forces(results['forces'])
+            self.ml_model.retrain()
+
+            # Now the first round of forces have been set by the AIMD, not by the ML model,
+            # and the model has bootstrapped the first one
+
+
+    def run(self, first_euler=True):
         """
         Handles timestepping; at each step, calculates the force and then
         advances via the take_timestep method.
         """
+        # --------------
+        #   First step
+        # --------------
 
         self.set_forces()
         self.structure.record_trajectory(self.frame, self.time, position=True, force=True)
 
-        if self['time'] == 0:
+        if self['time'] == 0 and  first_euler:
             self.take_timestep(method='TO_Euler')
 
-        # Primary iteration loop
-        # Most details are handled in the timestep function
-
+        # ------------------------
+        #  Primary iteration loop
+        # ------------------------
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
             self.take_timestep(method=self['timestep_method'])
 
             if self.mode == 'ML':
 
-                if self.gauge_model_uncertainty():
+                if self.ml_model.gauge_uncertainty():
                     continue
                 else:
-                    # print("Timestep with unacceptable uncertainty detected! \n Rewinding one step, and calling espresso to re-train the model.")
+                    if self.verbosity==2: print("Timestep with unacceptable uncertainty detected! \n Rewinding one step, and calling espresso to re-train the model.")
                     self.qe_config.run_espresso(self.structure, self.cell, cnt=self.frame_cnt,
                                                 iscorrection=True)
-                    self.retrain_ml_model(self.model, self.ML_model)
-                    self.take_timestep(dt=-dt)
+                    self.ml_model.retrain(self.structure)
+                    self.take_timestep(dt= -self['dt'])
 
         self.conclude_run()
 

@@ -64,8 +64,9 @@ def parse_output(filename, target):
 class RegressionModel:
     """Base class for regression models"""
 
-    def __init__(self, model, training_data, test_data, correction_folder,
-                 training_folder, model_type, target, verbosity):
+    # @SIMON make the correction folder have a default va
+    def __init__(self, model, training_data, test_data,
+                  model_type, target, verbosity=1,correction_folder=None, training_folder=None):
         """
         Initialization
         """
@@ -79,7 +80,7 @@ class RegressionModel:
         self.correction_folder = correction_folder
         self.aug_files = []
 
-    def upd_database(self, cutoff, eta_lower, eta_upper, eta_length, brav_mat, brav_inv, vec1, vec2, vec3):
+    def upd_database(self, cutoff, eta_lower, eta_upper, eta_length, structure):
         """
         Add new training data from augmentation folder
         """
@@ -93,8 +94,7 @@ class RegressionModel:
 
                 for pos, f in zip(positions, forces):
                     self.aug_and_norm(pos=pos, forces=f, cutoff=cutoff, eta_lower=eta_lower, eta_upper=eta_upper,
-                                      eta_length=eta_length, brav_mat=brav_mat, brav_inv=brav_inv, vec1=vec1,
-                                      vec2=vec2, vec3=vec3)
+                                      eta_length=eta_length, structure=structure)
 
     def init_database(self):
         """
@@ -103,28 +103,30 @@ class RegressionModel:
         pass
 
     def aug_and_norm(self, pos, forces, cutoff, eta_lower, eta_upper, eta_length,
-                     brav_mat, brav_inv, vec1, vec2, vec3):
+                     structure):
         """
         Augment and normalize
         """
 
         # augment
         self.augment_database(pos, forces, cutoff, eta_lower, eta_upper, eta_length,
-                              brav_mat, brav_inv, vec1, vec2, vec3)
+                              structure)
 
         # normalize forces and symmetry vectors
         self.normalize_force()
         self.normalize_symm()
 
     def augment_database(self, pos, forces, cutoff, eta_lower, eta_upper, eta_length,
-                         brav_mat, brav_inv, vec1, vec2, vec3):
+                         structure):
         """
         For a given supercell, calculate symmetry vectors for each atom
         """
         for n in range(len(pos)):
             # get symmetry vectors
             symm_x, symm_y, symm_z = symmetrize_forces(pos, n, cutoff, eta_lower, eta_upper,
-                                                       eta_length, brav_mat, brav_inv, vec1, vec2, vec3)
+                                                       eta_length, brav_mat=structure.lattice,
+                                                     brav_inv=structure.inv_lattice, vec1=structure.lattice[0],
+                                                    vec2 = structure.lattice[1], structure.lattice[2])
 
             # append symmetry vectors
             self.training_data['symms'].append(symm_x)
@@ -228,11 +230,12 @@ class GaussianProcess(RegressionModel):
                                  correction_folder=correction_folder, training_folder=training_folder,
                                  model_type='gp', target=target, verbosity=verbosity)
 
-    def retrain(self, cutoff, eta_lower, eta_upper, eta_length, brav_mat, brav_inv, vec1, vec2, vec3):
+    def retrain(self, cutoff, eta_lower, eta_upper, eta_length, structure):
         """
         Retrain GP model in active learning procedure based on new training data
         """
-        self.upd_database(cutoff, eta_lower, eta_upper, eta_length, brav_mat, brav_inv, vec1, vec2, vec3)
+
+        self.upd_database(cutoff, eta_lower, eta_upper, eta_length, structure)
         self.train()
 
     def opt_hyper(self):
@@ -248,7 +251,6 @@ class GaussianProcess(RegressionModel):
         res = minimize(minus_like_hyp, x0, args, method='nelder-mead', options={'xtol': 1e-8, 'disp': True})
 
         self.sigma, self.length_scale = res.x[0], res.x[1]
-
     def train(self):
         """
         Train ML model on training_data/ training_labels
@@ -280,6 +282,9 @@ class GaussianProcess(RegressionModel):
             self.pred, self.pred_var = GP_SE_pred(self.test_data['symm_norm'], self.test_data['forces_norm'], self.K,
                                                   self.L, self.alpha, self.sigma, self.length_scale, self.test_data)
 
+    # TODO @ SIMON maybe return an internal uncertainty vector which got stored up above
+    # during inference? Deets of implementation are in your hands
+    def get_uncertainty(self):
 
 class KernelRidgeRegression(RegressionModel):
     """KRR Regression Model"""
