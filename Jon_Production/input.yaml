@@ -67,6 +67,8 @@ qe_params:
 
   correction_folder: ''
 
+  store_all: False
+
 
   ecut_rhofactor: 8
 
