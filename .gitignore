@@ -49,3 +49,11 @@ crashlytics-build.properties
 fabric.properties
 
 .idea
+
+.ipynb_checkpoints/
+__pycache__/
+util/__pycache__/
+data/__pycache__/
+data/SE_1d_data/__pycache__/
+Reproduce_KRR/.ipynb_checkpoints/
+Jon_Production/__pycache__/
