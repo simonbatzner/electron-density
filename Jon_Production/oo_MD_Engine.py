@@ -300,6 +300,7 @@ class MD_Engine(MD_Config):
             # @STEVEN: we discussed to make run_espresso part of the engine, what is the status on that?
             self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True)
             self.ml_model.retrain(structure=self.structure)
+            self.ml_model.set_error_threshold()
 
     def run(self, first_euler=True):
         """
@@ -336,7 +337,7 @@ class MD_Engine(MD_Config):
                     if self.verbosity == 2:
                         print("Timestep with unacceptable uncertainty detected! \n "
                               "Rewinding one step, and calling espresso to re-train the model.")
-                        
+
                     self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
                     self.ml_model.retrain(structure=self.structure)
                     self.take_timestep(dt=-self['dt'])
@@ -376,23 +377,12 @@ class MD_Engine(MD_Config):
 
 
 def main():
-    # setup
     config = load_config_yaml('H2_test.yaml')
-
     qe_config = QE_Config(config['qe_params'], warn=True)
-    # pprint.pprint(qe_config)
-
     structure = Structure_Config(config['structure_params']).to_structure()
-    # qe_config.run_espresso(struc_config, augment_db=True)
-
     ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
-    # pprint.pprint(ml_config_)
-
     md_config = MD_Config(params=config['md_params'], warn=True)
-    # # pprint.pprint(md_config)
-
     engine = MD_Engine(structure, md_config, qe_config, ml_config_)
-    # print(engine)
 
     engine.run()
 

@@ -17,7 +17,7 @@ from sklearn.kernel_ridge import KernelRidge
 from sklearn.model_selection import GridSearchCV
 from sklearn.gaussian_process.kernels import RBF, Matern
 
-from Jon_Production.utility import get_SE_K, GP_SE_alpha, minus_like_hyp, symmetrize_forces
+from Jon_Production.utility import get_SE_K, GP_SE_alpha, minus_like_hyp, symmetrize_forces, GP_SE_pred
 from util.project_pwscf import parse_qe_pwscf_output
 from util.objects import File
 
@@ -26,8 +26,8 @@ def get_files(root_dir):
     """
     Find all files matching *.out
 
-    :param root_dir:    str, dir to walk from
-    :return:            list, files in root_dir ending with .out
+    :param root_dir:    (str), dir to walk from
+    :return: matching   (list), files in root_dir ending with .out
     """
     matching = []
 
@@ -46,8 +46,7 @@ def parse_output(filename, target):
     :param target:              str, f or e, whether to train to forces or energies
     :return: [data, target]     input config and target for ML model from QE output file
     """
-    file = File({'path': filename})
-    result = parse_qe_pwscf_output(file)
+    result = parse_qe_pwscf_output(outfile=File({'path': filename}))
 
     if target == 'f':
         positions, forces = result['positions'], result['forces']
@@ -64,7 +63,6 @@ def parse_output(filename, target):
 class RegressionModel:
     """Base class for regression models"""
 
-    # @SIMON make the correction folder has a default value
     def __init__(self, model, training_dir, model_type, target, force_conv=25.71104309541616, thresh_perc=.2,
                  eta_lower=0, eta_upper=2, eta_length=10, cutoff=8, verbosity=1, correction_folder='.'):
         """
@@ -98,6 +96,9 @@ class RegressionModel:
 
                 positions, forces = parse_output(file, target=self.target)
 
+                if pos == [] or forces == []:
+                    raise ValueError("Could not parse positions for forces from QE output file.")
+
                 for pos, f in zip(positions, forces):
                     self.aug_and_norm(pos=pos, forces=f, structure=structure)
 
@@ -106,7 +107,11 @@ class RegressionModel:
         Init training database from directory
         """
         for file in get_files(self.training_dir):
+
             positions, forces = parse_output(file, target=self.target)
+
+            if pos == [] or forces == []:
+                raise ValueError("Could not parse positions for forces from QE output file.")
 
             for pos, f in zip(positions, forces):
                 self.aug_and_norm(pos=pos, forces=f, structure=structure)
@@ -140,6 +145,7 @@ class RegressionModel:
         For a given supercell, calculate symmetry vectors for each atom
         """
         for n in range(len(pos)):
+            # TODO: make this a method in RegressionModel()
             # get symmetry vectors
             symm_x, symm_y, symm_z = symmetrize_forces(pos, n, self.cutoff, self.eta_lower, self.eta_upper,
                                                        self.eta_length, brav_mat=structure.lattice,
@@ -223,7 +229,11 @@ class GaussianProcess(RegressionModel):
         self.pred = None
         self.pred_var = None
 
+        # store uncertainties of model as {frame: var} dict
+        self.var_dict = None
+
         if self.sklearn:
+            # sklearn implementation of a Gaussian Process
 
             self.length_scale_min = length_scale_min
             self.length_scale_max = length_scale_max
@@ -241,8 +251,8 @@ class GaussianProcess(RegressionModel):
             self.model = GaussianProcessRegressor(kernel=self.kernel, n_restarts_optimizer=self.n_restarts)
 
         else:
-
             # PyFly implementation of a Gaussian Process
+
             self.model = None
             self.sigma = sigma
             self.K = None
@@ -277,9 +287,8 @@ class GaussianProcess(RegressionModel):
         self.sigma, self.length_scale = res.x[0], res.x[1]
 
     def train(self):
-        """
-        Train ML model on training_data/ training_labels
-        """
+        """Train ML model on training_data/ training_labels"""
+
         if self.sklearn:
             self.model.fit(self.training_data['symm_norm'], self.training_data['forces_norm'])
 
@@ -294,23 +303,23 @@ class GaussianProcess(RegressionModel):
             self.alpha = GP_SE_alpha(self.K, self.L, self.training_data['symm_norm'])
 
     def predict(self, structure, target='f'):
-        """
-        Predict on test data
-        """
+        """ Predict with specified target, predictions are stored as model attributes"""
+
         if target == 'f':
 
             if self.sklearn:
                 pass
-                # TODO: check this
-                # self.pred, std = self.model.predict(self.test_data['symm_norm'], return_std=True)
-                # self.pred_var = std ** 2
+                # TODO: check this, add iteration over atoms
+                self.pred, std = self.model.predict(self.test_data['symm_norm'], return_std=True)
+                self.pred_var = std ** 2
 
             else:
                 pass
-                # TODO: correct this
-                # self.pred, self.pred_var = GP_SE_pred(self.test_data['symm_norm'], self.test_data['forces_norm'],
-                #                                       self.K, self.L, self.alpha, self.sigma,
-                #                                       self.length_scale, self.test_data)
+                # TODO: correct this, add iteration over atoms
+                self.pred, self.pred_var = GP_SE_pred(self.test_data['symm_norm'], self.test_data['forces_norm'],
+                                                      self.K, self.L, self.alpha, self.sigma,
+                                                      self.length_scale, self.test_data)
+
         elif target == 'e':
             raise ValueError("Not implemented yet. Stay tuned.")
 
@@ -318,12 +327,12 @@ class GaussianProcess(RegressionModel):
             raise ValueError("No proper ML target defined.")
 
     def is_var_inbound(self):
+        """Returns boolean of whether the model's predictiv variance lies within the error threshold"""
         return self.err_thresh > self.pred_var
 
-    # TODO @ SIMON maybe return an internal uncertainty vector which got stored up above
-    # during inference? Deets of implementation are in your hands
     def get_uncertainty(self):
-        pass
+        """Return dict of models predictive variances as d = {frame: var}"""
+        return self.var_dict
 
 
 class KernelRidgeRegression(RegressionModel):
@@ -365,4 +374,3 @@ class KernelRidgeRegression(RegressionModel):
         Predict on test data
         """
         pass
-        # self.model.predict(self.test_data['symm_norm'])
