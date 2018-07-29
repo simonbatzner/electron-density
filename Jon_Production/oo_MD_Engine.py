@@ -57,7 +57,7 @@ class MD_Engine(MD_Config):
 
         # init training database for regression model
         if ml_config['training_dir'] is not None:
-            self.ml_model.init_database()
+            self.ml_model.init_database(structure=self.structure)
 
         # Contains info on each frame according to wallclock time and configuration
         self.system_trajectory = []
@@ -69,11 +69,11 @@ class MD_Engine(MD_Config):
     # noinspection PyPep8Naming
     def get_energy(self):
         """
-        Check mode option; if ML, use regression model to get energy.
-        If AIMD, call ESPRESSO and report energy.
-        If LJ, compute the Lennard-Jones energy of the configuration.
+        If ML: use regression model to get energy
+        If AIMD: call ESPRESSO and report energy
+        If LJ: compute the Lennard-Jones energy of the configuration
 
-        :return: float Energy of configuration
+        :return: float, energy of configuration
         """
 
         if self['mode'] == 'ML':
@@ -101,7 +101,8 @@ class MD_Engine(MD_Config):
 
     def set_forces(self):
         """
-        Check mode option; if ML, use regression model to get forces, if AIMD, call ESPRESSO and report forces.
+        If ML, use regression model to get forces
+        If AIMD, call ESPRESSO and report forces
         If LJ, compute the Lennard-Jones forces of the configuration by finite differences.
         """
 
@@ -138,14 +139,10 @@ class MD_Engine(MD_Config):
 
                 return
 
-    # noinspection PyPep8Naming,PyPep8Naming,PyPep8Naming,PyPep8Naming,PyPep8Naming,PyUnboundLocalVariable,PyUnboundLocalVariable
     def set_fd_forces(self):
         """
-        Perturbs the atoms by a small amount dx in each direction
-        and returns the gradient (and thus the force)
+        Perturbs the atoms by a small amount dx in each direction and returns the gradient (and thus the force)
         via a finite-difference approximation.
-
-        Uses fd_accuracy and fd_dx parameters from class.
         """
 
         dx = self.fd_dx
@@ -156,11 +153,13 @@ class MD_Engine(MD_Config):
                   " AIMD is configured only to work on a force-driven basis.")
 
         E0 = self.get_energy()
-        if self.verbosity == 4: print('E0:', E0)
+        if self.verbosity == 4:
+            print('E0:', E0)
 
-        # Main loop of setting forces
+        # set forces
         for atom in self.structure:
             for coord in range(3):
+
                 # Perturb to x + dx
                 atom.position[coord] += dx
                 Eplus = self.get_energy()
@@ -197,13 +196,11 @@ class MD_Engine(MD_Config):
 
     def take_timestep(self, dt=None, method=None):
         """
-        Propagate forward in time by dt using
-        specified method, then update forces.
+        Propagate forward in time by dt using specified method, then update forces.
 
         Args:
             dt (float)  : Defaults to specified in input, timestep duration
             method (str): Choose one of Verlet or Third-Order Euler.
-
         """
         tick = ti.time()
         if self['verbosity'] >= 3:
@@ -216,8 +213,8 @@ class MD_Engine(MD_Config):
 
         method = method or self["timestep_method"]
 
-        # third-order euler method, Is a suggested way to begin a Verlet run
-        # see:  https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
+        # third-order euler method, a suggested way to begin a Verlet run
+        # see: https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
 
         if method == 'TO_Euler':
             for atom in self.structure:
@@ -227,7 +224,7 @@ class MD_Engine(MD_Config):
                     atom.velocity[i] += atom.force[i] * dt / atom.mass
 
         # superior Verlet integration
-        # see:  https://en.wikipedia.org/wiki/Verlet_integration
+        # see: https://en.wikipedia.org/wiki/Verlet_integration
 
         # Todo vectorize this
 
@@ -265,14 +262,12 @@ class MD_Engine(MD_Config):
         Additionally opens output file in an output file was specified.
 
         This is where handling of the augmentation database will occur.
-
-        :return:
         """
         self.qe_config.validate_against_structure(self.structure)
 
-        # ------------------
+        # --------------------------------------------------
         # Check consistency of correction folders
-        # ------------------
+        # --------------------------------------------------
         qe_corr = False
         ml_corr = False
 
@@ -282,31 +277,30 @@ class MD_Engine(MD_Config):
                 qe_corr = True
             if self.ml_model.correction_folder:
                 ml_corr = True
+
+            # @STEVEN: we shouldn't pass this separately -- include one in the input and init both configs from that dir
             if ml_corr and qe_corr:
                 if self.qe_config['correction_folder'] != self.ml_model.correction_folder:
                     print("WARNING!!! Correction folder is inconsistent between the QE config and the ML config!"
                           "This is very bad-- the ML model will not get any better and this will result in a loop")
                     raise Exception("Mismatch between qe config correction folder and ML config.")
+
             if ml_corr and not qe_corr:
                 self.qe_config['correction_folder'] = self.ml_model.correction_folder
+
             if qe_corr and not ml_corr:
                 self.ml_model.correction_folder = self.qe_config['correction_folder']
 
-        # ---------------------------------------------------
-        # Check to see if DB exists for ML model, begin if not
-        # ----------------------------------------------------
+        # ----------------------------------------------------------------------------------------
+        # check to see if training database of DFT forces exists, else: run DFT and bootstrap
+        # -----------------------------------------------------------------------------------------
 
-        # TODO @SIMON  Here is where it should check to see if the training set is size 0
-        # and if it is, to run espresso
-        # THIS IS SCRATCH CODE WHICH ROUGHLY DETAILS THE OUTLINE, change this up
-        if self.mode == "ML" and self.ml_model.attribute_for_has_training_set:
+        if self.mode == "ML" and self.ml_model.training_data is not None:
             self.frame_cnt = 0
-            results = self.run_espresso(self.structure, cnt=0, augment_db=True)
-            self.structure.set_forces(results['forces'])
-            self.ml_model.retrain()
 
-            # Now the first round of forces have been set by the AIMD, not by the ML model,
-            # and the model has bootstrapped the first one
+            # @STEVEN: we discussed to make run_espresso part of the engine, what is the status on that?
+            self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True)
+            self.ml_model.retrain()
 
     def run(self, first_euler=True):
         """

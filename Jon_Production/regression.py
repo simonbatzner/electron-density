@@ -19,6 +19,7 @@ from sklearn.gaussian_process.kernels import RBF, Matern
 
 from Jon_Production.utility import get_SE_K, GP_SE_alpha, minus_like_hyp, symmetrize_forces
 from util.project_pwscf import parse_qe_pwscf_output
+from util.objects import File
 
 
 def get_files(root_dir):
@@ -45,7 +46,8 @@ def parse_output(filename, target):
     :param target:              str, f or e, whether to train to forces or energies
     :return: [data, target]     input config and target for ML model from QE output file
     """
-    result = parse_qe_pwscf_output(filename)
+    file = File({'path': filename})
+    result = parse_qe_pwscf_output(file)
 
     if target == 'f':
         positions, forces = result['positions'], result['forces']
@@ -97,15 +99,13 @@ class RegressionModel:
                 positions, forces = parse_output(file, target=self.target)
 
                 for pos, f in zip(positions, forces):
-                    self.aug_and_norm(pos=pos, forces=f, cutoff=cutoff, eta_lower=eta_lower, eta_upper=eta_upper,
-                                      eta_length=eta_length, structure=structure)
+                    self.aug_and_norm(pos=pos, forces=f, structure=structure)
 
     def init_database(self, structure):
         """
         Init training database from directory
         """
         for file in get_files(self.training_dir):
-
             positions, forces = parse_output(file, target=self.target)
 
             for pos, f in zip(positions, forces):
@@ -116,7 +116,6 @@ class RegressionModel:
     def set_error_threshold(self):
         """
         Set threshold for predictive variance
-        :return:
         """
         # TODO: this should be set in first MD frame, then only compared against
         if self.err_thresh is None:
@@ -156,6 +155,7 @@ class RegressionModel:
             self.training_data['forces'].append(forces[n][0])
             self.training_data['forces'].append(forces[n][1])
             self.training_data['forces'].append(forces[n][2])
+            print("updated training data")
 
     def normalize_symm(self):
         """
@@ -246,8 +246,7 @@ class GaussianProcess(RegressionModel):
             self.L = None
             self.alpha = None
 
-        RegressionModel.__init__(self, model=self.model, training_dir=training_dir,
-                                 correction_folder=correction_folder,
+        RegressionModel.__init__(self, model=self.model, training_dir=training_dir, correction_folder=correction_folder,
                                  model_type='gp', target=target, force_conv=force_conv, thresh_perc=thresh_perc,
                                  eta_lower=0, eta_upper=2, eta_length=10, cutoff=8,
                                  verbosity=verbosity)
