@@ -6,7 +6,6 @@
 Steven Torrisi
 """
 import time as ti
-import pprint
 
 import numpy as np
 import numpy.linalg as la
@@ -28,11 +27,11 @@ class MD_Engine(MD_Config):
             structure   (Structure): Contains all information about atoms in cell.
             md_config   (MD_Config): Parameters for molecular dynamics simulation
             qe_config   (QE_Config): Parameters for quantum ESPRESSO runs
-            ml_model    (RegressionModel): Regression model which provides forces or energies
+            ml_config   (ml_config): Config for regression model
 
         """
 
-        # Set configurations
+        # set configs
         super(MD_Engine, self).__init__(md_config)
 
         self.structure = structure
@@ -43,6 +42,7 @@ class MD_Engine(MD_Config):
         # init regression model
         # TODO make sure params for both sklearn and self-made are all there and not redudant
 
+        # TODO: just pass ml_config object and init in RegressionModel()
         self.ml_model = GaussianProcess(training_dir=ml_config['training_dir'],
                                         length_scale=ml_config['gp_params']['length_scale'],
                                         length_scale_min=ml_config['gp_params']['length_scale_min'],
@@ -59,28 +59,28 @@ class MD_Engine(MD_Config):
         if ml_config['training_dir'] is not None:
             self.ml_model.init_database(structure=self.structure)
 
-        # Contains info on each frame according to wallclock time and configuration
+        # contains info on each frame according to wallclock time and configuration
         self.system_trajectory = []
         self.augmentation_steps = []
 
         # MD frame cnt, corresponds to DFT data in correction folder
         self.frame_cnt = 0
 
-    # noinspection PyPep8Naming
     def get_energy(self):
         """
+
         If ML: use regression model to get energy
         If AIMD: call ESPRESSO and report energy
         If LJ: compute the Lennard-Jones energy of the configuration
 
-        :return: float, energy of configuration
+        :return: (float), energy of configuration
         """
 
         if self['mode'] == 'ML':
-            return self.ml_model.get_energy(self.structure)
+            return self.ml_model.get_energy(structure=self.structure)
 
         if self['mode'] == 'AIMD':
-            result = self.qe_config.run_espresso()
+            result = self.qe_config.run_espresso(structure=self.structure)
             return result['energy']
 
         if self['mode'] == 'LJ':
@@ -128,10 +128,10 @@ class MD_Engine(MD_Config):
         # run regression model
         elif self.md_config['mode'] == 'ML':
 
-            if self.ml_model.type == 'energy':
+            if self.ml_model.target == 'energy':
                 self.ml_model.predict(structure=self.structure, target='e')
 
-            elif self.ml_model.type == 'force':
+            elif self.ml_model.target == 'force':
                 forces = self.ml_model.predict(structure=self.structure, target='f')
 
                 for n, at in enumerate(self.structure):
@@ -199,8 +199,8 @@ class MD_Engine(MD_Config):
         Propagate forward in time by dt using specified method, then update forces.
 
         Args:
-            dt (float)  : Defaults to specified in input, timestep duration
-            method (str): Choose one of Verlet or Third-Order Euler.
+            dt          (float): Defaults to specified in input, timestep duration
+            method      (str): Choose one of Verlet or Third-Order Euler.
         """
         tick = ti.time()
         if self['verbosity'] >= 3:
@@ -223,16 +223,15 @@ class MD_Engine(MD_Config):
                     atom.position[i] += atom.velocity[i] * dt + atom.force[i] * dtdt * .5 / atom.mass
                     atom.velocity[i] += atom.force[i] * dt / atom.mass
 
-        # superior Verlet integration
-        # see: https://en.wikipedia.org/wiki/Verlet_integration
+        # superior Verlet integration, see: https://en.wikipedia.org/wiki/Verlet_integration
 
         # Todo vectorize this
 
         elif method == 'Verlet':
             for atom in self.structure:
                 for i in range(3):
-                    # Store the current position to later store as the previous position
-                    # After using it to update the position
+
+                    # store the current pos to later store as the previous pos after using it to update the position
 
                     temp_coord = np.copy(atom.position[i])
                     atom.position[i] = 2 * atom.position[i] - atom.prev_pos[i] + \
@@ -266,7 +265,7 @@ class MD_Engine(MD_Config):
         self.qe_config.validate_against_structure(self.structure)
 
         # --------------------------------------------------
-        # Check consistency of correction folders
+        # check consistency of correction folders
         # --------------------------------------------------
         qe_corr = False
         ml_corr = False
@@ -300,14 +299,14 @@ class MD_Engine(MD_Config):
 
             # @STEVEN: we discussed to make run_espresso part of the engine, what is the status on that?
             self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True)
-            self.ml_model.retrain()
+            self.ml_model.retrain(structure=self.structure)
 
     def run(self, first_euler=True):
         """
         Compute forces, move timestep
         """
         # --------------
-        #   First step
+        #   first step
         # --------------
 
         self.set_forces()
@@ -321,7 +320,7 @@ class MD_Engine(MD_Config):
             self.take_timestep(method='TO_Euler')
 
         # ------------------------
-        #  Primary iteration loop
+        #  primary iteration loop
         # ------------------------
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
@@ -329,16 +328,17 @@ class MD_Engine(MD_Config):
 
             if self.mode == 'ML':
 
-                if self.ml_model.gauge_uncertainty():
+                if self.ml_model.is_var_inbound():
                     continue
 
                 # if not, compute DFT, retrain model, move on
                 else:
-                    if self.verbosity == 2: print(
-                        "Timestep with unacceptable uncertainty detected! \n Rewinding one step, and calling espresso to re-train the model.")
-                    self.qe_config.run_espresso(self.structure, self.cell, cnt=self.frame_cnt,
-                                                iscorrection=True)
-                    self.ml_model.retrain(self.structure)
+                    if self.verbosity == 2:
+                        print("Timestep with unacceptable uncertainty detected! \n "
+                              "Rewinding one step, and calling espresso to re-train the model.")
+                        
+                    self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
+                    self.ml_model.retrain(structure=self.structure)
                     self.take_timestep(dt=-self['dt'])
 
         self.conclude_run()

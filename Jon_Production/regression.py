@@ -86,7 +86,7 @@ class RegressionModel:
         self.aug_files = []
         self.err_thresh = None
 
-    def upd_database(self, cutoff, eta_lower, eta_upper, eta_length, structure):
+    def upd_database(self, structure):
         """
         Add new training data from augmentation folder
         """
@@ -201,6 +201,9 @@ class RegressionModel:
         for n in range(td_size):
             self.training_data['forces_norm'][n] = self.training_data['forces_norm'][n] / vec_std
 
+    def get_energy(self, structure):
+        raise ValueError("Not implemented yet. Stay tuned.")
+
 
 class GaussianProcess(RegressionModel):
     """Gaussian Process Regression Model"""
@@ -251,12 +254,12 @@ class GaussianProcess(RegressionModel):
                                  eta_lower=0, eta_upper=2, eta_length=10, cutoff=8,
                                  verbosity=verbosity)
 
-    def retrain(self, cutoff, eta_lower, eta_upper, eta_length, structure):
+    def retrain(self, structure):
         """
         Retrain GP model in active learning procedure based on new training data
         """
 
-        self.upd_database(cutoff, eta_lower, eta_upper, eta_length, structure)
+        self.upd_database(structure)
         self.train()
 
     def opt_hyper(self):
