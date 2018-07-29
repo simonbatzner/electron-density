@@ -446,13 +446,13 @@ class Structure_Config(dict):
             for pos in self.positions:
                 for component in pos[1]:
                     component += np.random.normal(0, scale=self['pert_size'])
-                    
+
         super(Structure_Config, self).__init__(self)
 
     def to_structure(self):
 
         mass_dict = {'H': 1.0, 'C': 12.01, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994,
-                     'Pd': 106.42, 'Au': 196.96655, 'Ag':‎ 107.8682}
+                     'Pd': 106.42, 'Au': 196.96655, 'Ag': 107.8682}
 
 
         atoms = []

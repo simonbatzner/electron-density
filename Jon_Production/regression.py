@@ -17,7 +17,7 @@ from sklearn.kernel_ridge import KernelRidge
 from sklearn.model_selection import GridSearchCV
 from sklearn.gaussian_process.kernels import RBF, Matern
 
-from Jon_Production.utility import get_SE_K, GP_SE_alpha, minus_like_hyp, GP_SE_pred, symmetrize_forces
+from Jon_Production.utility import get_SE_K, GP_SE_alpha, minus_like_hyp, symmetrize_forces
 from util.project_pwscf import parse_qe_pwscf_output
 
 
@@ -42,6 +42,7 @@ def parse_output(filename, target):
     """
     Parse QE output file and return new datapoint as input_data, target
     :param filename:            str, QE file to read from
+    :param target:              str, f or e, whether to train to forces or energies
     :return: [data, target]     input config and target for ML model from QE output file
     """
     result = parse_qe_pwscf_output(filename)
@@ -61,25 +62,23 @@ def parse_output(filename, target):
 class RegressionModel:
     """Base class for regression models"""
 
-# <<<<<<< HEAD
-#     def __init__(self, model, training_data, test_data, correction_folder,
-#                  training_folder, model_type, target, force_conv, thresh_perc, verbosity):
-# =======
-    # @SIMON make the correction folder have a default va
-    def __init__(self, model, training_data, test_data,
-                  model_type, target, verbosity=1,correction_folder=None, training_folder=None):
-# >>>>>>> Steven_Development
+    # @SIMON make the correction folder has a default value
+    def __init__(self, model, training_dir, model_type, target, force_conv=25.71104309541616, thresh_perc=.2,
+                 eta_lower=0, eta_upper=2, eta_length=10, cutoff=8, verbosity=1, correction_folder='.'):
         """
         Initialization
         """
         self.model = model
         self.target = target
-        self.training_data = training_data
-        self.test_data = test_data
+        self.training_dir = training_dir
+        self.training_data = None
         self.model_type = model_type
         self.verbosity = verbosity
-        self.training_folder = training_folder
         self.correction_folder = correction_folder
+        self.eta_lower = eta_lower
+        self.eta_upper = eta_upper
+        self.eta_length = eta_length
+        self.cutoff = cutoff
         self.force_conv = force_conv
         self.thresh_perc = thresh_perc
         self.aug_files = []
@@ -101,18 +100,16 @@ class RegressionModel:
                     self.aug_and_norm(pos=pos, forces=f, cutoff=cutoff, eta_lower=eta_lower, eta_upper=eta_upper,
                                       eta_length=eta_length, structure=structure)
 
-    def init_database(self, cutoff, eta_lower, eta_upper, eta_length, brav_mat, brav_inv, vec1, vec2, vec3):
+    def init_database(self, structure):
         """
         Init training database from directory
         """
-        for file in get_files(self.training_folder):
+        for file in get_files(self.training_dir):
 
             positions, forces = parse_output(file, target=self.target)
 
             for pos, f in zip(positions, forces):
-                self.aug_and_norm(pos=pos, forces=f, cutoff=cutoff, eta_lower=eta_lower, eta_upper=eta_upper,
-                                  eta_length=eta_length, brav_mat=brav_mat, brav_inv=brav_inv, vec1=vec1,
-                                  vec2=vec2, vec3=vec3)
+                self.aug_and_norm(pos=pos, forces=f, structure=structure)
 
         self.set_error_threshold()
 
@@ -128,31 +125,27 @@ class RegressionModel:
         else:
             return
 
-    def aug_and_norm(self, pos, forces, cutoff, eta_lower, eta_upper, eta_length,
-                     structure):
+    def aug_and_norm(self, pos, forces, structure):
         """
-        Augment and normalize
+        Augment and normalize database
         """
-
         # augment
-        self.augment_database(pos, forces, cutoff, eta_lower, eta_upper, eta_length,
-                              structure)
+        self.augment_database(pos, forces, structure)
 
         # normalize forces and symmetry vectors
         self.normalize_force()
         self.normalize_symm()
 
-    def augment_database(self, pos, forces, cutoff, eta_lower, eta_upper, eta_length,
-                         structure):
+    def augment_database(self, pos, forces, structure):
         """
         For a given supercell, calculate symmetry vectors for each atom
         """
         for n in range(len(pos)):
             # get symmetry vectors
-            symm_x, symm_y, symm_z = symmetrize_forces(pos, n, cutoff, eta_lower, eta_upper,
-                                                       eta_length, brav_mat=structure.lattice,
-                                                     brav_inv=structure.inv_lattice, vec1=structure.lattice[0],
-                                                    vec2 = structure.lattice[1], structure.lattice[2])
+            symm_x, symm_y, symm_z = symmetrize_forces(pos, n, self.cutoff, self.eta_lower, self.eta_upper,
+                                                       self.eta_length, brav_mat=structure.lattice,
+                                                       brav_inv=structure.inv_lattice, vec1=structure.lattice[0],
+                                                       vec2=structure.lattice[1], vec3=structure.lattice[2])
 
             # append symmetry vectors
             self.training_data['symms'].append(symm_x)
@@ -212,10 +205,10 @@ class RegressionModel:
 class GaussianProcess(RegressionModel):
     """Gaussian Process Regression Model"""
 
-    def __init__(self, training_data=None, test_data=None, kernel='rbf',
-                 length_scale=1, length_scale_min=1e-5, length_scale_max=1e5, sigma=1, n_restarts=10,
-                 correction_folder='.', training_folder='.', target='f', force_conv=25.71104309541616,
-                 thresh_perc=.2, verbosity=1, sklearn=False):
+    def __init__(self, training_dir=None, kernel='rbf', length_scale=1, length_scale_min=1e-5, length_scale_max=1e5,
+                 force_conv=25.71104309541616, thresh_perc=.2, eta_lower=0, eta_upper=2, eta_length=10, cutoff=8,
+                 sigma=1, n_restarts=10, correction_folder='.', target='f', verbosity=1, sklearn=False):
+
         """
         Initialization
         """
@@ -253,9 +246,10 @@ class GaussianProcess(RegressionModel):
             self.L = None
             self.alpha = None
 
-        RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
-                                 correction_folder=correction_folder, training_folder=training_folder,
+        RegressionModel.__init__(self, model=self.model, training_dir=training_dir,
+                                 correction_folder=correction_folder,
                                  model_type='gp', target=target, force_conv=force_conv, thresh_perc=thresh_perc,
+                                 eta_lower=0, eta_upper=2, eta_length=10, cutoff=8,
                                  verbosity=verbosity)
 
     def retrain(self, cutoff, eta_lower, eta_upper, eta_length, structure):
@@ -279,6 +273,7 @@ class GaussianProcess(RegressionModel):
         res = minimize(minus_like_hyp, x0, args, method='nelder-mead', options={'xtol': 1e-8, 'disp': True})
 
         self.sigma, self.length_scale = res.x[0], res.x[1]
+
     def train(self):
         """
         Train ML model on training_data/ training_labels
@@ -303,17 +298,17 @@ class GaussianProcess(RegressionModel):
         if target == 'f':
 
             if self.sklearn:
-
+                pass
                 # TODO: check this
-                self.pred, std = self.model.predict(self.test_data['symm_norm'], return_std=True)
-                self.pred_var = std ** 2
+                # self.pred, std = self.model.predict(self.test_data['symm_norm'], return_std=True)
+                # self.pred_var = std ** 2
 
             else:
-
+                pass
                 # TODO: correct this
-                self.pred, self.pred_var = GP_SE_pred(self.test_data['symm_norm'], self.test_data['forces_norm'],
-                                                      self.K, self.L, self.alpha, self.sigma,
-                                                      self.length_scale, self.test_data)
+                # self.pred, self.pred_var = GP_SE_pred(self.test_data['symm_norm'], self.test_data['forces_norm'],
+                #                                       self.K, self.L, self.alpha, self.sigma,
+                #                                       self.length_scale, self.test_data)
         elif target == 'e':
             raise ValueError("Not implemented yet. Stay tuned.")
 
@@ -326,12 +321,13 @@ class GaussianProcess(RegressionModel):
     # TODO @ SIMON maybe return an internal uncertainty vector which got stored up above
     # during inference? Deets of implementation are in your hands
     def get_uncertainty(self):
+        pass
+
 
 class KernelRidgeRegression(RegressionModel):
     """KRR Regression Model"""
 
-    def __init__(self, training_data, training_labels, test_data, test_labels, kernel,
-                 alpha_range, gamma_range, cv, correction_folder, training_folder, sklearn, verbosity):
+    def __init__(self, training_dir, kernel, alpha_range, gamma_range, cv, correction_folder, sklearn, verbosity):
         """
         Initialization
         """
@@ -351,8 +347,9 @@ class KernelRidgeRegression(RegressionModel):
             # PyFly implementation of Kernel Ridge Regression
             pass
 
-        RegressionModel.__init__(self, model=self.model, training_data=training_data, test_data=test_data,
-                                 correction_folder=correction_folder, training_folder=training_folder,
+        RegressionModel.__init__(self, model=self.model,
+                                 training_dir=training_dir,
+                                 correction_folder=correction_folder,
                                  model_type='krr', target='f', verbosity=verbosity)
 
     def train(self):
@@ -365,4 +362,5 @@ class KernelRidgeRegression(RegressionModel):
         """
         Predict on test data
         """
-        self.model.predict(self.test_data['symm_norm'])
+        pass
+        # self.model.predict(self.test_data['symm_norm'])

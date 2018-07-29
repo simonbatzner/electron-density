@@ -5,7 +5,7 @@
 """"
 Steven Torrisi
 """
-import time as time
+import time as ti
 import pprint
 
 import numpy as np
@@ -42,11 +42,17 @@ class MD_Engine(MD_Config):
 
         # init regression model
         # TODO make sure params for both sklearn and self-made are all there and not redudant
-        self.ml_model = GaussianProcess(length_scale=ml_config['length_scale'],
-                                        length_scale_min=ml_config['length_scale_min'],
-                                        length_scale_max=ml_config['length_scale_max'],
-                                        force_conv=ml_config['force_conv'],
-                                        thresh_perc=ml_config['thresh_perc'],
+
+        self.ml_model = GaussianProcess(training_dir=ml_config['training_dir'],
+                                        length_scale=ml_config['gp_params']['length_scale'],
+                                        length_scale_min=ml_config['gp_params']['length_scale_min'],
+                                        length_scale_max=ml_config['gp_params']['length_scale_max'],
+                                        force_conv=ml_config['gp_params']['threshold_params']['force_conv'],
+                                        thresh_perc=ml_config['gp_params']['threshold_params']['thresh_perc'],
+                                        eta_lower=ml_config['fingerprint_params']['eta_lower'],
+                                        eta_upper=ml_config['fingerprint_params']['eta_upper'],
+                                        eta_length=ml_config['fingerprint_params']['eta_length'],
+                                        cutoff=ml_config['fingerprint_params']['cutoff'],
                                         sklearn=ml_config['sklearn'])
 
         # init training database for regression model
@@ -199,7 +205,7 @@ class MD_Engine(MD_Config):
             method (str): Choose one of Verlet or Third-Order Euler.
 
         """
-        tick = time.time()
+        tick = ti.time()
         if self['verbosity'] >= 3:
             print(self.get_report(forces=True))
 
@@ -246,7 +252,7 @@ class MD_Engine(MD_Config):
         self.frame += 1
         self.set_forces()
 
-        tock = time.time()
+        tock = ti.time()
 
         self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, elapsed=tock - tick)
 
@@ -386,7 +392,6 @@ def main():
     # qe_config.run_espresso(struc_config, augment_db=True)
 
     ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
-    print(ml_config_)
     # pprint.pprint(ml_config_)
 
     md_config = MD_Config(params=config['md_params'], warn=True)
@@ -394,7 +399,7 @@ def main():
 
     engine = MD_Engine(structure, md_config, qe_config, ml_config_)
     # print(engine)
-    #
+
     engine.run()
 
 
