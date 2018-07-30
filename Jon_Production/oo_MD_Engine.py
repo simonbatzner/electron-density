@@ -326,6 +326,7 @@ class MD_Engine(MD_Config):
 
             self.take_timestep(method=self['timestep_method'])
 
+            # @STEVEN: why don't we check the var first, then decide whether to trust or call DFT?
             if self.mode == 'ML':
 
                 if self.ml_model.is_var_inbound():
@@ -337,6 +338,7 @@ class MD_Engine(MD_Config):
                         print("Timestep with unacceptable uncertainty detected! \n "
                               "Rewinding one step, and calling espresso to re-train the model.")
 
+                    # TODO: this is missing the forces
                     self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
                     self.ml_model.retrain(structure=self.structure)
                     self.take_timestep(dt=-self['dt'])

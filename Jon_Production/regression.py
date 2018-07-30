@@ -331,9 +331,11 @@ class GaussianProcess(RegressionModel):
                     self.forces_curr[cnt].append(force_pred)
                     self.tot_force.append(np.abs(force_pred * self.force_conv))
 
-                    # # TODO: update dict
-                    # self.var_dict.update
-                    # {frame: self.}
+            return self.forces_curr
+
+            # # TODO: update dict
+            # self.var_dict.update
+            # {frame: self.}
 
         elif target == 'e':
             raise ValueError("Not implemented yet. Stay tuned.")

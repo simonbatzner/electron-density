@@ -59,3 +59,7 @@ Reproduce_KRR/.ipynb_checkpoints/
 Jon_Production/__pycache__/
 .pytest_cache/
 Reproduce_KRR/logs/
+
+Jon_Production/pwscf.save/
+notebook.tex
+submit.script
