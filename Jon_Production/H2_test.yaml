@@ -46,7 +46,7 @@ ml_params:
 
   sklearn: False
 
-  training_dir: '.'
+  training_dir: None
 
   gp_params:
     length_scale: 1

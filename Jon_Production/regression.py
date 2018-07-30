@@ -71,7 +71,9 @@ class RegressionModel:
         self.model = model
         self.target = target
         self.training_dir = training_dir
-        self.training_data = None
+        self.training_data = {}
+        self.training_data['symms'] = []
+        self.training_data['forces'] = []
         self.model_type = model_type
         self.verbosity = verbosity
         self.correction_folder = correction_folder
@@ -107,7 +109,7 @@ class RegressionModel:
         """Init training database from directory"""
 
         for file in get_outfiles(self.training_dir):
-
+            print(file)
             positions, forces = parse_output(file, target=self.target)
 
             if positions == [] or forces == []:

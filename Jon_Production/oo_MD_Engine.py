@@ -39,6 +39,9 @@ class MD_Engine(MD_Config):
         self.ml_config = ml_config
         self.hpc_config = hpc_config
 
+        # @STEVEN: md_config wasn't initialized properly -- not sure if this is the correct fix
+        self.md_config = md_config
+
         # init regression model
         # TODO make sure params for both sklearn and self-made are all there and not redudant
         # TODO: just pass ml_config object and init in RegressionModel()
@@ -55,7 +58,8 @@ class MD_Engine(MD_Config):
                                         sklearn=ml_config['sklearn'])
 
         # init training database for regression model
-        if ml_config['training_dir'] is not None:
+        # TODO: edit this!
+        if ml_config['training_dir'] != 'None':
             self.ml_model.init_database(structure=self.structure)
 
         # contains info on each frame according to wallclock time and configuration
@@ -107,7 +111,6 @@ class MD_Engine(MD_Config):
 
         # run espresso
         if self['mode'] == 'AIMD':
-
             results = self.qe_config.run_espresso(self.structure, cnt=self.frame_cnt)
 
             if self.verbosity == 4:
@@ -127,10 +130,10 @@ class MD_Engine(MD_Config):
         # run regression model
         elif self.md_config['mode'] == 'ML':
 
-            if self.ml_model.target == 'energy':
+            if self.ml_model.target == 'e':
                 self.ml_model.predict(structure=self.structure, target='e')
 
-            elif self.ml_model.target == 'force':
+            elif self.ml_model.target == 'f':
                 forces = self.ml_model.predict(structure=self.structure, target='f')
 
                 for n, at in enumerate(self.structure):
@@ -293,7 +296,7 @@ class MD_Engine(MD_Config):
         # check to see if training database of DFT forces exists, else: run DFT and bootstrap
         # -----------------------------------------------------------------------------------------
 
-        if self.mode == "ML" and self.ml_model.training_data is not None:
+        if self.mode == "ML" and self.ml_model.training_data['forces'] != []:
             self.frame_cnt = 0
 
             # @STEVEN: we discussed to make run_espresso part of the engine, what is the status on that?
@@ -305,11 +308,17 @@ class MD_Engine(MD_Config):
         """
         Compute forces, move timestep
         """
+
         # --------------
         #   first step
         # --------------
 
-        self.set_forces()
+        if self.ml_model.training_data['forces'] != [] or self['mode'] != 'ML':
+            self.set_forces()
+
+        else:
+            self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
+            self.ml_model.retrain(structure=self.structure)
 
         if self.frame == 0:
             self.ml_model.set_error_threshold()
@@ -382,6 +391,7 @@ def main():
     qe_config = QE_Config(config['qe_params'], warn=True)
     structure = Structure_Config(config['structure_params']).to_structure()
     ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
+    print(ml_config_)
     md_config = MD_Config(params=config['md_params'], warn=True)
     engine = MD_Engine(structure, md_config, qe_config, ml_config_)
 
