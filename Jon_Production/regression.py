@@ -50,7 +50,7 @@ def parse_output(filename, target):
     result = parse_qe_pwscf_output(outfile=File({'path': filename}))
 
     if target == 'f':
-        positions, forces = result['positions'], result['forces']
+        positions, forces = result['initial_positions'], result['forces']
 
     elif target == 'e':
         raise ValueError("Not implemented yet. Stay tuned.")
@@ -71,9 +71,7 @@ class RegressionModel:
         self.model = model
         self.target = target
         self.training_dir = training_dir
-        self.training_data = {}
-        self.training_data['symms'] = []
-        self.training_data['forces'] = []
+        self.training_data = {'symms': [], 'forces': []}
         self.model_type = model_type
         self.verbosity = verbosity
         self.correction_folder = correction_folder

@@ -309,9 +309,9 @@ class MD_Engine(MD_Config):
         Compute forces, move timestep
         """
 
-        # --------------
+        # --------------------------------------------------------
         #   first step
-        # --------------
+        # --------------------------------------------------------
 
         if self.ml_model.training_data['forces'] != [] or self['mode'] != 'ML':
             self.set_forces()
@@ -328,9 +328,10 @@ class MD_Engine(MD_Config):
         if self['time'] == 0 and first_euler:
             self.take_timestep(method='TO_Euler')
 
-        # ------------------------
-        #  primary iteration loop
-        # ------------------------
+        # --------------------------------------------------------
+        #   iterate through frames
+        # --------------------------------------------------------
+        
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
             self.take_timestep(method=self['timestep_method'])
@@ -391,7 +392,6 @@ def main():
     qe_config = QE_Config(config['qe_params'], warn=True)
     structure = Structure_Config(config['structure_params']).to_structure()
     ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
-    print(ml_config_)
     md_config = MD_Config(params=config['md_params'], warn=True)
     engine = MD_Engine(structure, md_config, qe_config, ml_config_)
 
