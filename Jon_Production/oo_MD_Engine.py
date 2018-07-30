@@ -41,7 +41,6 @@ class MD_Engine(MD_Config):
 
         # init regression model
         # TODO make sure params for both sklearn and self-made are all there and not redudant
-
         # TODO: just pass ml_config object and init in RegressionModel()
         self.ml_model = GaussianProcess(training_dir=ml_config['training_dir'],
                                         length_scale=ml_config['gp_params']['length_scale'],
