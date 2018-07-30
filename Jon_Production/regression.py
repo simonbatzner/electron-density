@@ -293,7 +293,11 @@ class GaussianProcess(RegressionModel):
             self.alpha = GP_SE_alpha(self.K, self.L, self.training_data['symm_norm'])
 
     def predict(self, structure, target='f'):
-        """Predict with specified target, predictions are stored as model attributes"""
+        """
+        Predict with specified target, predictions are stored as model attributes and return
+
+        :return self.forces_curr      (list), , current list of force predictions for atoms
+        """
 
         if target == 'f':
 
@@ -322,10 +326,21 @@ class GaussianProcess(RegressionModel):
                         self.pred_var = (std_pred * self.force_conv) ** 2
 
                     else:
-                        # TODO: missing arguments
-                        # force_pred, self.pred_var = GP_SE_pred(symm_norm, self.K, self.L, self.alpha, self.sigma,
-                        #                                        self.length_scale, self.test_data)
-                        pass
+
+                        force_pred, pred_var = GP_SE_pred(X=self.training_data['symm_norm'],
+                                                          y=self.training_data['forces_norm'],
+                                                          K=self.K,
+                                                          L=self.L,
+                                                          alpha=self.alpha,
+                                                          sig=self.sigma,
+                                                          ls=self.length_scale,
+                                                          xt=symm_norm)
+
+                        pred_var = pred_var * norm_fac
+                        force_pred = force_pred * norm_fac
+
+                        # TODO: check with Steven about unit conversion
+                        self.pred_var = pred_var * self.force_conv ** 2
 
                     # store forces and error
                     self.forces_curr[cnt].append(force_pred)
