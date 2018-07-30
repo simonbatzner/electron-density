@@ -100,8 +100,7 @@ class RegressionModel:
                 if positions == [] or forces == []:
                     raise ValueError("Could not parse positions for forces from QE output file.")
 
-                for pos, f in zip(positions, forces):
-                    self.aug_and_norm(pos=pos, forces=f, structure=structure)
+                self.aug_and_norm(pos=positions, forces=forces, structure=structure)
 
     def init_database(self, structure):
         """Init training database from directory"""
@@ -113,8 +112,7 @@ class RegressionModel:
             if positions == [] or forces == []:
                 raise ValueError("Could not parse positions for forces from QE output file.")
 
-            for pos, f in zip(positions, forces):
-                self.aug_and_norm(pos=pos, forces=f, structure=structure)
+            self.aug_and_norm(pos=positions, forces=forces, structure=structure)
 
         self.set_error_threshold()
 
@@ -214,7 +212,7 @@ class GaussianProcess(RegressionModel):
                  sigma=1, n_restarts=10, correction_folder='.', target='f', verbosity=1, sklearn=False):
 
         """ Initialization """
-        self.length_scale = length_scale
+        self.length_scale = float(length_scale)
         self.sklearn = sklearn
         self.verbosity = verbosity
 
@@ -228,8 +226,8 @@ class GaussianProcess(RegressionModel):
         if self.sklearn:
             # sklearn implementation of a Gaussian Process
 
-            self.length_scale_min = length_scale_min
-            self.length_scale_max = length_scale_max
+            self.length_scale_min = float(length_scale_min)
+            self.length_scale_max = float(length_scale_max)
             self.n_restarts = n_restarts
 
             self.kernel_dict = {'rbf': RBF(length_scale=self.length_scale,
@@ -266,7 +264,7 @@ class GaussianProcess(RegressionModel):
     def opt_hyper(self):
         """Optimize hyperparameters by minimizing minus log likelihood w/ Nelder-Mead"""
 
-        args = (self.training_data['symm_norm'], self.training_data['forces_norm'])
+        args = (np.array(self.training_data['symm_norm']), np.array(self.training_data['forces_norm']))
 
         # initial guess
         x0 = np.array([self.sigma, self.length_scale])
@@ -280,7 +278,7 @@ class GaussianProcess(RegressionModel):
         """Train ML model on training_data/ training_labels"""
 
         if self.sklearn:
-            self.model.fit(self.training_data['symm_norm'], self.training_data['forces_norm'])
+            self.model.fit(np.array(self.training_data['symm_norm']), np.array(self.training_data['forces_norm']))
 
         else:
             # optimize hyperparameters

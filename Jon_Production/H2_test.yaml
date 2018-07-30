@@ -44,7 +44,7 @@ ml_params:
 
   regression_model: GP
 
-  sklearn: False
+  sklearn: True
 
   training_dir: None
 
