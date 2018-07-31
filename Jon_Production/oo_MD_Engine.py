@@ -299,7 +299,7 @@ class MD_Engine(MD_Config):
         if self.mode == "ML" and self.ml_model.training_data['forces'] != []:
             self.frame_cnt = 0
 
-            # @STEVEN: we discussed to make run_espresso part of the engine, what is the status on that?
+            # @STEVEN: should we make run_espresso a method in MD_engine()?
             self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True)
             self.ml_model.retrain(structure=self.structure)
             self.ml_model.set_error_threshold()
@@ -336,7 +336,7 @@ class MD_Engine(MD_Config):
 
             self.take_timestep(method=self['timestep_method'])
 
-            # @STEVEN: why don't we check the var first, then decide whether to trust or call DFT?
+            # @STEVEN: why don't we check the var first, then decide whether to trust or call DFT instead of taking step back?
             if self.mode == 'ML':
 
                 if self.ml_model.is_var_inbound():
@@ -358,8 +358,14 @@ class MD_Engine(MD_Config):
     # TODO: Implement end-run report
     def conclude_run(self):
         print("===============================================================\n")
-        print("Run concluded. Final positions and energy of configuration:\n")
-        print("Energy:", self.get_energy(), '\n')
+
+        if self.ml_model.target == 'f':
+            print("Run concluded. Final positions:\n")
+            print(self.structure.get_positions())
+
+        else:
+            raise ValueError("Energy target not implemented yet. Stay tuned.")
+
         print(self.get_report(forces=True))
 
     def get_report(self, forces=True, velocities=False, time_elapsed=0):
@@ -374,17 +380,20 @@ class MD_Engine(MD_Config):
         """
 
         # TODO: we could format this more nicely
-        report = 'Frame #: {}, SystemTime: {}, ElapsedTime {}:\n'.format(self['frame'], np.round(self['time'], 3),
+        report = 'Frame: {}, System Time: {}, Elapsed Time: {}\n'.format(self['frame'], np.round(self['time'], 3),
                                                                          np.round(time_elapsed, 3))
-        report += 'Atom | Element | Position'
-        report += ' | Force' if forces else ''
+        report += 'Atom | Element |\t\tPosition\t'
+        report += '\t\t|\t\tForce' if forces else ''
         report += ',Velocity' if velocities else ''
         report += '\n'
         for n, at in enumerate(self.structure):
-            report += '{},{},{}{}{} \n'.format(n, at.element, str(tuple([np.round(x, 4) for x in at.position])),
-                                               ',' + str(
-                                                   tuple([np.round(v, 4) for v in at.velocity])) if velocities else '',
-                                               ',' + str(tuple([np.round(f, 4) for f in at.force])) if forces else '')
+            report += '{}    |    {}    | {} {} {} \n'.format(n, at.element,
+                                                              str(tuple([np.round(x, 4) for x in at.position])),
+                                                              '|' + str(
+                                                                  tuple([np.round(v, 4) for v in
+                                                                         at.velocity])) if velocities else '',
+                                                              '| ' + str(tuple([np.round(f, 4) for f in
+                                                                                at.force])) if forces else '')
 
         return report
 
