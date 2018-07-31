@@ -299,8 +299,13 @@ class GaussianProcess(RegressionModel):
 
         if target == 'f':
 
+            self.forces_curr = []
+            self.tot_force = []
+
             # symmetrize atomic environment
             for cnt in range(len(structure.get_positions())):
+
+                self.forces_curr.append([])
 
                 symm = symmetrize_forces(pos=structure.get_positions(), atom=cnt, cutoff=self.cutoff,
                                          eta_lower=self.eta_lower, eta_upper=self.eta_upper, eta_length=self.eta_length,
@@ -327,12 +332,8 @@ class GaussianProcess(RegressionModel):
 
                         force_pred, pred_var = GP_SE_pred(X=self.training_data['symm_norm'],
                                                           y=self.training_data['forces_norm'],
-                                                          K=self.K,
-                                                          L=self.L,
-                                                          alpha=self.alpha,
-                                                          sig=self.sigma,
-                                                          ls=self.length_scale,
-                                                          xt=symm_norm)
+                                                          K=self.K, L=self.L, alpha=self.alpha, sig=self.sigma,
+                                                          ls=self.length_scale, xt=symm_norm)
 
                         pred_var = pred_var * norm_fac
                         force_pred = force_pred * norm_fac
@@ -340,6 +341,7 @@ class GaussianProcess(RegressionModel):
                         # TODO: check with Steven about unit conversion
                         self.pred_var = pred_var * self.force_conv ** 2
 
+                    # TODO: CLEAR UP THIS INDENTATION
                     # store forces and error
                     self.forces_curr[cnt].append(force_pred)
                     self.tot_force.append(np.abs(force_pred * self.force_conv))

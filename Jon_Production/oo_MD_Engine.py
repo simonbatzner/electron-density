@@ -331,7 +331,7 @@ class MD_Engine(MD_Config):
         # --------------------------------------------------------
         #   iterate through frames
         # --------------------------------------------------------
-        
+
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
             self.take_timestep(method=self['timestep_method'])
@@ -372,10 +372,12 @@ class MD_Engine(MD_Config):
             :param velocities:  (bool) Determines if velocities will be printed.
             :param time_elapsed: (float) Puts elapsed time for a frame into the report
         """
-        report = 'Frame#:{},SystemTime:{},ElapsedTime{}:\n'.format(self['frame'], np.round(self['time'], 3),
-                                                                   np.round(time_elapsed, 3))
-        report += 'Atom,Element,Position'
-        report += ',Force' if forces else ''
+
+        # TODO: we could format this more nicely
+        report = 'Frame #: {}, SystemTime: {}, ElapsedTime {}:\n'.format(self['frame'], np.round(self['time'], 3),
+                                                                         np.round(time_elapsed, 3))
+        report += 'Atom | Element | Position'
+        report += ' | Force' if forces else ''
         report += ',Velocity' if velocities else ''
         report += '\n'
         for n, at in enumerate(self.structure):
