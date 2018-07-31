@@ -31,16 +31,15 @@ class MD_Engine(MD_Config):
 
         """
 
-        # set configs
+        # set configs: Note, that the
+        # MD Engine is a member of class md_config
+        # And so it has more concise references to attributes and key-value pairs
         super(MD_Engine, self).__init__(md_config)
 
         self.structure = structure
         self.qe_config = qe_config
         self.ml_config = ml_config
         self.hpc_config = hpc_config
-
-        # @STEVEN: md_config wasn't initialized properly -- not sure if this is the correct fix
-        self.md_config = md_config
 
         # init regression model
         # TODO make sure params for both sklearn and self-made are all there and not redudant
@@ -128,7 +127,7 @@ class MD_Engine(MD_Config):
             pass
 
         # run regression model
-        elif self.md_config['mode'] == 'ML':
+        elif self.mode['mode'] == 'ML':
 
             if self.ml_model.target == 'e':
                 self.ml_model.predict(structure=self.structure, target='e')
@@ -150,7 +149,7 @@ class MD_Engine(MD_Config):
         dx = self.fd_dx
         fd_accuracy = self['fd_accuracy']
 
-        if self.energy_or_force_driven == "energy" and self.md_config.mode == "AIMD":
+        if self.energy_or_force_driven == "energy" and self.mode == "AIMD":
             print("WARNING! You are asking for an energy driven model with Ab-Initio MD;",
                   " AIMD is configured only to work on a force-driven basis.")
 
@@ -279,7 +278,6 @@ class MD_Engine(MD_Config):
             if self.ml_model.correction_folder:
                 ml_corr = True
 
-            # @STEVEN: we shouldn't pass this separately -- include one in the input and init both configs from that dir
             if ml_corr and qe_corr:
                 if self.qe_config['correction_folder'] != self.ml_model.correction_folder:
                     print("WARNING!!! Correction folder is inconsistent between the QE config and the ML config!"
@@ -299,7 +297,6 @@ class MD_Engine(MD_Config):
         if self.mode == "ML" and self.ml_model.training_data['forces'] != []:
             self.frame_cnt = 0
 
-            # @STEVEN: should we make run_espresso a method in MD_engine()?
             self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True)
             self.ml_model.retrain(structure=self.structure)
             self.ml_model.set_error_threshold()
@@ -334,9 +331,7 @@ class MD_Engine(MD_Config):
 
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
-            self.take_timestep(method=self['timestep_method'])
 
-            # @STEVEN: why don't we check the var first, then decide whether to trust or call DFT instead of taking step back?
             if self.mode == 'ML':
 
                 if self.ml_model.is_var_inbound():
@@ -346,12 +341,14 @@ class MD_Engine(MD_Config):
                 else:
                     if self.verbosity == 2:
                         print("Timestep with unacceptable uncertainty detected! \n "
-                              "Rewinding one step, and calling espresso to re-train the model.")
+                              "Calling espresso to re-train the model.")
 
-                    # TODO: this is missing the forces
                     self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
                     self.ml_model.retrain(structure=self.structure)
-                    self.take_timestep(dt=-self['dt'])
+                    self.set_forces()
+
+            self.take_timestep(method=self['timestep_method'])
+
 
         self.conclude_run()
 
