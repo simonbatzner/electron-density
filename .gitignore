@@ -63,3 +63,5 @@ Reproduce_KRR/logs/
 Jon_Production/pwscf.save/
 notebook.tex
 submit.script
+Jon_Production/db_update_*
+*loss.png

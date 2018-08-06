@@ -36,7 +36,7 @@ md_params:
 
   write_outfile: 'H2_test.out'
 
-  energy_or_force: 'Energy' # 'Energy' | 'Force | 'Both'
+  energy_or_force: 'Force' # 'Energy' | 'Force | 'Both'
 
 
 

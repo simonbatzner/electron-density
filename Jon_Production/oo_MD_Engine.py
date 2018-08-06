@@ -127,7 +127,7 @@ class MD_Engine(MD_Config):
             pass
 
         # run regression model
-        elif self.mode['mode'] == 'ML':
+        elif self.mode == 'ML':
 
             if self.ml_model.target == 'e':
                 self.ml_model.predict(structure=self.structure, target='e')
@@ -295,7 +295,6 @@ class MD_Engine(MD_Config):
         # -----------------------------------------------------------------------------------------
 
         if self.mode == "ML" and self.ml_model.training_data['forces'] != []:
-            self.frame_cnt = 0
 
             self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True)
             self.ml_model.retrain(structure=self.structure)
@@ -331,7 +330,6 @@ class MD_Engine(MD_Config):
 
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
-
             if self.mode == 'ML':
 
                 if self.ml_model.is_var_inbound():
@@ -339,6 +337,8 @@ class MD_Engine(MD_Config):
 
                 # if not, compute DFT, retrain model, move on
                 else:
+                    self.frame_cnt += 1
+
                     if self.verbosity == 2:
                         print("Timestep with unacceptable uncertainty detected! \n "
                               "Calling espresso to re-train the model.")
@@ -371,8 +371,8 @@ class MD_Engine(MD_Config):
 
         Args:
 
-            :param forces:      (bool) Determines if forces will be printed.
-            :param velocities:  (bool) Determines if velocities will be printed.
+            :param forces:       (bool) Determines if forces will be printed.
+            :param velocities:   (bool) Determines if velocities will be printed.
             :param time_elapsed: (float) Puts elapsed time for a frame into the report
         """
 

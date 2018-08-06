@@ -195,6 +195,7 @@ def parse_qe_pwscf_output(outfile):
                     temp_forces.append(float(x))
                 forces.append(list(temp_forces))
 
+
     result = {'energy': total_energy, 'kpoints': kpoints, 'volume': volume, 'positions': positions,
               'initial_positions': initial_positions}
     if forces != []:
@@ -203,6 +204,7 @@ def parse_qe_pwscf_output(outfile):
         result['total_force'] = total_force
     if pressure != None:
         result['pressure'] = pressure
+
     return result
 
 

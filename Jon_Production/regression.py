@@ -217,6 +217,7 @@ class GaussianProcess(RegressionModel):
         self.verbosity = verbosity
 
         # predictions
+        # TODO: see if these should be replaced by lists - check dependencies
         self.pred = None
         self.pred_var = None
 

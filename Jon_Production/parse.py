@@ -632,9 +632,9 @@ class QE_Config(dict):
             if not self['pwscf_input'].get(s, False):
                 self['pwscf_input'][s] = {}
 
-        # --------------
+        # ------------------------
         # Augmentation DB Options
-        # ---------------
+        # ------------------------
         if self.get('store_all', False):
             self.store_always = True
         else:
@@ -705,9 +705,12 @@ class QE_Config(dict):
         kpoints = None
         volume = None
 
-        # Flags to start collecting final coordinates
+        # Flags to start collecting intial and final coordinates
         final_coords = False
         get_coords = False
+        initial_coords = False
+        initial_positions = []
+        prev_ = False
 
         with open(outfile, 'r') as outf:
             for line in outf:
@@ -731,6 +734,27 @@ class QE_Config(dict):
                     line = line.split('(')[0]
                     line = line.strip()
                     volume = float(line)
+
+                # --------------------------------------------------------
+                # positions, get the initial positions of atoms
+                # --------------------------------------------------------
+                if line.lower().startswith('   cartesian axes'):
+                    initial_coords = True
+                    continue
+
+                if line.lower().startswith('     site') and initial_coords == True:
+                    prev_ = True
+                    continue
+
+                if prev_ == True and initial_coords == True and line.split() != []:
+                    line = line.split()
+
+                    try:
+                        initial_positions.append([float(line[-4]), float(line[-3]), float(line[-2])])
+                    except:
+                        initial_coords = False
+
+                    continue
 
                 ## Chunk of code meant to get the final coordinates of the atomic positions
                 if line.lower().startswith('begin final coordinates'):
@@ -759,7 +783,7 @@ class QE_Config(dict):
             print("WARNING! ")
             raise Exception("Quantum ESPRESSO parser failed to read the file {}. Run failed.".format(outfile))
 
-        result = {'energy': total_energy, 'kpoints': kpoints, 'volume': volume, 'positions': positions}
+        result = {'energy': total_energy, 'kpoints': kpoints, 'volume': volume, 'positions': positions, 'inital_positions': initial_positions}
         if forces:
             result['forces'] = forces
         if total_force is not None:
