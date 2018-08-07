@@ -382,22 +382,25 @@ class MD_Engine(MD_Config):
             :param velocities:   (bool) Determines if velocities will be printed.
             :param time_elapsed: (float) Puts elapsed time for a frame into the report
         """
-
-        # TODO: we could format this more nicely
-        report = 'Frame: {}, System Time: {}, Elapsed Time: {}\n'.format(self['frame'], np.round(self['time'], 3),
+        report = '=' * 100
+        report += '\nFrame: {} - System Time: {} - Elapsed Time: {}\n\n'.format(self['frame'], np.round(self['time'], 3),
                                                                          np.round(time_elapsed, 3))
-        report += 'Atom | Element |\t\tPosition\t'
-        report += '\t\t|\t\tForce' if forces else ''
-        report += ',Velocity' if velocities else ''
-        report += '\n'
+        data = []
+        data.append(["Atom", "Element",  "Position", "Forces" if forces else "", "Velocities" if velocities else "", "\n"])
+
         for n, at in enumerate(self.structure):
-            report += '{}    |    {}    | {} {} {} \n'.format(n, at.element,
-                                                              str(tuple([np.round(x, 4) for x in at.position])),
-                                                              '|' + str(
-                                                                  tuple([np.round(v, 4) for v in
-                                                                         at.velocity])) if velocities else '',
-                                                              '| ' + str(tuple([np.round(f, 4) for f in
-                                                                                at.force])) if forces else '')
+            data.append([str(n), at.element, str(tuple([np.round(x, 4) for x in at.position])),
+                        str(tuple([np.round(f, 4) for f in at.force])) if forces else "",
+                         str(tuple([np.round(v, 4) for v in at.velocity])) if velocities else "", "\n"])
+
+        col_width = max(len(word) for row in data for word in row) + 4
+
+        for row in data:
+            for i, word in enumerate(row):
+                if word != "\n":
+                    report += "".join(word.ljust(col_width))
+                else:
+                    report += "".join(word)
 
         return report
 
