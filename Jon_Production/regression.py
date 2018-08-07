@@ -157,6 +157,7 @@ class RegressionModel:
             self.training_data['forces'].append(forces[n][1])
             self.training_data['forces'].append(forces[n][2])
 
+
     def normalize_symm(self):
         """Normalize the symmetry vectors in the training set"""
 
@@ -180,6 +181,7 @@ class RegressionModel:
             # normalize the current element
             for n in range(td_size):
                 self.training_data['symm_norm'][n][m] = self.training_data['symm_norm'][n][m] / vec_std
+
 
     def normalize_force(self):
         """Normalize forces"""
@@ -293,9 +295,9 @@ class GaussianProcess(RegressionModel):
 
     def predict(self, structure, target='f'):
         """
-        Predict with specified target, predictions are stored as model attributes and return
+        Predict with specified target, predictions are stored as model attributes and returned
 
-        :return self.forces_curr      (list), , current list of force predictions for atoms
+        :return self.forces_curr      (list), current force predictions for atoms
         """
 
         if target == 'f':
@@ -309,7 +311,10 @@ class GaussianProcess(RegressionModel):
 
                 self.forces_curr.append([])
 
-                symm = symmetrize_forces(pos=structure.get_positions(), atom=cnt, cutoff=self.cutoff,
+                # print("Positions from Structure object: {}".format([i/structure.alat for i in structure.get_positions()]))
+                pos_alat = [i / structure.alat for i in structure.get_positions()]
+
+                symm = symmetrize_forces(pos=pos_alat, atom=cnt, cutoff=self.cutoff,
                                          eta_lower=self.eta_lower, eta_upper=self.eta_upper, eta_length=self.eta_length,
                                          brav_mat=structure.lattice, brav_inv=structure.inv_lattice,
                                          vec1=structure.lattice[0],
@@ -343,7 +348,7 @@ class GaussianProcess(RegressionModel):
                         # TODO: check with Steven about unit conversion
                         self.pred_vars.append(pred_var * self.force_conv ** 2)
 
-                    # TODO: CLEAR UP THIS INDENTATION
+                    # TODO: check this
                     # store forces and error
                     self.forces_curr[cnt].append(force_pred)
                     self.tot_force.append(np.abs(force_pred * self.force_conv))
@@ -367,7 +372,6 @@ class GaussianProcess(RegressionModel):
         """Returns boolean of whether the model's predictive variance lies within the error threshold"""
 
         # TODO: Jon compared against stddev, not var - need to choose one
-        print(np.sqrt(self.mean_pred_var))
         return self.err_thresh > np.sqrt(self.mean_pred_var)
 
     def get_uncertainty(self):
