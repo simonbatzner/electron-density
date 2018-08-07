@@ -3,23 +3,22 @@
 # pylint: disable=line-too-long, invalid-name, too-many-arguments
 
 """"
-
 Steven Torrisi
 """
-import time as time
-import pprint
+import time as ti
 
 import numpy as np
 import numpy.linalg as la
 
 from parse import load_config_yaml, QE_Config, Structure_Config, ml_config, MD_Config
 from utility import first_derivative_2nd, first_derivative_4th
+from regression import GaussianProcess
 
 mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994}
 
 
 class MD_Engine(MD_Config):
-    def __init__(self, structure, md_config, qe_config, ml_model, hpc_config=None):
+    def __init__(self, structure, md_config, qe_config, ml_config, hpc_config=None):
         """
         Engine which drives accelerated molecular dynamics. Is of type MD_Config
         so that molecular dynamics options are referred to using self.attributes.
@@ -28,44 +27,62 @@ class MD_Engine(MD_Config):
             structure   (Structure): Contains all information about atoms in cell.
             md_config   (MD_Config): Parameters for molecular dynamics simulation
             qe_config   (QE_Config): Parameters for quantum ESPRESSO runs
-            ml_model    (RegressionModel): Regression model which provides forces or energies
+            ml_config   (ml_config): Config for regression model
 
         """
 
-        # Set configurations
+        # set configs: Note, that the
+        # MD Engine is a member of class md_config
+        # And so it has more concise references to attributes and key-value pairs
         super(MD_Engine, self).__init__(md_config)
 
         self.structure = structure
         self.qe_config = qe_config
-        self.ml_model = ml_model
+        self.ml_config = ml_config
         self.hpc_config = hpc_config
 
-        # Contains info on each frame according to wallclock time
-        # and configuration
+        # init regression model
+        # TODO make sure params for both sklearn and self-made are all there and not redudant
+        # TODO: just pass ml_config object and init in RegressionModel()
+        self.ml_model = GaussianProcess(training_dir=ml_config['training_dir'],
+                                        length_scale=ml_config['gp_params']['length_scale'],
+                                        length_scale_min=ml_config['gp_params']['length_scale_min'],
+                                        length_scale_max=ml_config['gp_params']['length_scale_max'],
+                                        force_conv=ml_config['gp_params']['threshold_params']['force_conv'],
+                                        thresh_perc=ml_config['gp_params']['threshold_params']['thresh_perc'],
+                                        eta_lower=ml_config['fingerprint_params']['eta_lower'],
+                                        eta_upper=ml_config['fingerprint_params']['eta_upper'],
+                                        eta_length=ml_config['fingerprint_params']['eta_length'],
+                                        cutoff=ml_config['fingerprint_params']['cutoff'],
+                                        sklearn=ml_config['sklearn'])
+
+        # init training database for regression model
+        # TODO: edit this!
+        if ml_config['training_dir'] != 'None':
+            self.ml_model.init_database(structure=self.structure)
+
+        # contains info on each frame according to wallclock time and configuration
         self.system_trajectory = []
         self.augmentation_steps = []
 
         # MD frame cnt, corresponds to DFT data in correction folder
         self.frame_cnt = 0
 
-
-
-    # noinspection PyPep8Naming
     def get_energy(self):
         """
-        Check mode option; if ML, use regression model to get energy.
-        If AIMD, call ESPRESSO and report energy.
-        If LJ, compute the Lennard-Jones energy of the configuration.
 
-        :return: float Energy of configuration
+        If ML: use regression model to get energy
+        If AIMD: call ESPRESSO and report energy
+        If LJ: compute the Lennard-Jones energy of the configuration
+
+        :return: (float), energy of configuration
         """
 
         if self['mode'] == 'ML':
-            return self.ml_model.get_energy(self.structure)
+            return self.ml_model.get_energy(structure=self.structure)
 
         if self['mode'] == 'AIMD':
-
-            result = self.qe_config.run_espresso()
+            result = self.qe_config.run_espresso(structure=self.structure)
             return result['energy']
 
         if self['mode'] == 'LJ':
@@ -86,16 +103,17 @@ class MD_Engine(MD_Config):
 
     def set_forces(self):
         """
-        Check mode option; if ML, use regression model to get forces, if AIMD, call ESPRESSO and report forces.
+        If ML, use regression model to get forces
+        If AIMD, call ESPRESSO and report forces
         If LJ, compute the Lennard-Jones forces of the configuration by finite differences.
         """
 
         # run espresso
         if self['mode'] == 'AIMD':
-
             results = self.qe_config.run_espresso(self.structure, cnt=self.frame_cnt)
 
-            if self.verbosity == 4: print("E0:", results['energy'])
+            if self.verbosity == 4:
+                print("E0:", results['energy'])
 
             for n, at in enumerate(self.structure):
                 at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
@@ -109,43 +127,40 @@ class MD_Engine(MD_Config):
             pass
 
         # run regression model
-        elif self.md_config['mode'] == 'ML':
+        elif self.mode == 'ML':
 
-            if self.ml_model.type == 'energy':
-                self.set_fd_forces()
+            if self.ml_model.target == 'e':
+                self.ml_model.predict(structure=self.structure, target='e')
 
-            elif self.ml_model.type == 'force':
-
-                forces = self.ml_model.get_forces(self.structure)
+            elif self.ml_model.target == 'f':
+                forces = self.ml_model.predict(structure=self.structure, target='f')
 
                 for n, at in enumerate(self.structure):
                     at.force = list(np.array(forces[n]) * 13.6 / 0.529177)
 
                 return
 
-    # noinspection PyPep8Naming,PyPep8Naming,PyPep8Naming,PyPep8Naming,PyPep8Naming,PyUnboundLocalVariable,PyUnboundLocalVariable
     def set_fd_forces(self):
         """
-        Perturbs the atoms by a small amount dx in each direction
-        and returns the gradient (and thus the force)
+        Perturbs the atoms by a small amount dx in each direction and returns the gradient (and thus the force)
         via a finite-difference approximation.
-
-        Uses fd_accuracy and fd_dx parameters from class.
         """
 
         dx = self.fd_dx
         fd_accuracy = self['fd_accuracy']
 
-        if self.energy_or_force_driven == "energy" and self.md_config.mode == "AIMD":
+        if self.energy_or_force_driven == "energy" and self.mode == "AIMD":
             print("WARNING! You are asking for an energy driven model with Ab-Initio MD;",
                   " AIMD is configured only to work on a force-driven basis.")
 
         E0 = self.get_energy()
-        if self.verbosity == 4: print('E0:', E0)
+        if self.verbosity == 4:
+            print('E0:', E0)
 
-        # Main loop of setting forces
+        # set forces
         for atom in self.structure:
             for coord in range(3):
+
                 # Perturb to x + dx
                 atom.position[coord] += dx
                 Eplus = self.get_energy()
@@ -182,15 +197,13 @@ class MD_Engine(MD_Config):
 
     def take_timestep(self, dt=None, method=None):
         """
-        Propagate forward in time by dt using
-        specified method, then update forces.
+        Propagate forward in time by dt using specified method, then update forces.
 
         Args:
-            dt (float)  : Defaults to specified in input, timestep duration
-            method (str): Choose one of Verlet or Third-Order Euler.
-
+            dt          (float): Defaults to specified in input, timestep duration
+            method      (str): Choose one of Verlet or Third-Order Euler.
         """
-        tick = time.time()
+        tick = ti.time()
         if self['verbosity'] >= 3:
             print(self.get_report(forces=True))
 
@@ -201,8 +214,8 @@ class MD_Engine(MD_Config):
 
         method = method or self["timestep_method"]
 
-        # Third-order euler method, Is a suggested way to begin a Verlet run, see:
-        # https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
+        # third-order euler method, a suggested way to begin a Verlet run
+        # see: https://en.wikipedia.org/wiki/Verlet_integration#Starting_the_iteration
 
         if method == 'TO_Euler':
             for atom in self.structure:
@@ -211,22 +224,19 @@ class MD_Engine(MD_Config):
                     atom.position[i] += atom.velocity[i] * dt + atom.force[i] * dtdt * .5 / atom.mass
                     atom.velocity[i] += atom.force[i] * dt / atom.mass
 
-        ######
-        # Superior Verlet integration
-        # Citation:  https://en.wikipedia.org/wiki/Verlet_integration
-        ######
+        # superior Verlet integration, see: https://en.wikipedia.org/wiki/Verlet_integration
 
         # Todo vectorize this
 
         elif method == 'Verlet':
             for atom in self.structure:
                 for i in range(3):
-                    # Store the current position to later store as the previous position
-                    # After using it to update the position
+
+                    # store the current pos to later store as the previous pos after using it to update the position
 
                     temp_coord = np.copy(atom.position[i])
                     atom.position[i] = 2 * atom.position[i] - atom.prev_pos[i] + \
-                        atom.force[i] * dtdt * .5 / atom.mass
+                                       atom.force[i] * dtdt * .5 / atom.mass
                     atom.velocity[i] += atom.force[i] * dt / atom.mass
                     atom.prev_pos[i] = np.copy(temp_coord)
                     if self.verbosity == 5: print("Just propagated a distance of ",
@@ -239,9 +249,9 @@ class MD_Engine(MD_Config):
         self.frame += 1
         self.set_forces()
 
-        tock = time.time()
+        tock = ti.time()
 
-        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, elapsed= tock - tick)
+        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, elapsed=tock - tick)
 
     # TODO Determine all of the necessary ingredients which may or may not be missing
     # TODO Info redundant or common to both should be checked here as well
@@ -252,91 +262,114 @@ class MD_Engine(MD_Config):
         Additionally opens output file in an output file was specified.
 
         This is where handling of the augmentation database will occur.
-
-        :return:
         """
         self.qe_config.validate_against_structure(self.structure)
 
-        # ------------------
-        # Check consistency of correction folders
-        # ------------------
+        # --------------------------------------------------
+        # check consistency of correction folders
+        # --------------------------------------------------
         qe_corr = False
         ml_corr = False
 
-        if self.mode=='ML':
+        if self.mode == 'ML':
 
-            if self.qe_config.get('correction_folder',False):
+            if self.qe_config.get('correction_folder', False):
                 qe_corr = True
             if self.ml_model.correction_folder:
                 ml_corr = True
+
             if ml_corr and qe_corr:
-                if self.qe_config['correction_folder']!= self.ml_model.correction_folder:
+                if self.qe_config['correction_folder'] != self.ml_model.correction_folder:
                     print("WARNING!!! Correction folder is inconsistent between the QE config and the ML config!"
                           "This is very bad-- the ML model will not get any better and this will result in a loop")
                     raise Exception("Mismatch between qe config correction folder and ML config.")
+
             if ml_corr and not qe_corr:
                 self.qe_config['correction_folder'] = self.ml_model.correction_folder
+
             if qe_corr and not ml_corr:
                 self.ml_model.correction_folder = self.qe_config['correction_folder']
 
-        # ---------------------------------------------------
-        # Check to see if DB exists for ML model, begin if not
-        # ----------------------------------------------------
+        # ----------------------------------------------------------------------------------------
+        # check to see if training database of DFT forces exists, else: run DFT and bootstrap
+        # -----------------------------------------------------------------------------------------
 
-        #TODO @SIMON  Here is where it should check to see if the training set is size 0
-        # and if it is, to run espresso
-        # THIS IS SCRATCH CODE WHICH ROUGHLY DETAILS THE OUTLINE, change this up
-        if self.mode=="ML" and self.ml_model.attribute_for_has_training_set:
+        if self.mode == "ML" and self.ml_model.training_data['forces'] != []:
 
-            self.frame_cnt=0
-            results = self.run_espresso(self.structure, cnt=0, augment_db=True)
-            self.structure.set_forces(results['forces'])
-            self.ml_model.retrain()
-
-            # Now the first round of forces have been set by the AIMD, not by the ML model,
-            # and the model has bootstrapped the first one
-
+            self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True)
+            self.ml_model.retrain(structure=self.structure)
+            self.ml_model.set_error_threshold()
 
     def run(self, first_euler=True):
         """
-        Handles timestepping; at each step, calculates the force and then
-        advances via the take_timestep method.
+        Compute forces, move timestep
         """
-        # --------------
-        #   First step
-        # --------------
 
-        self.set_forces()
+        # --------------------------------------------------------
+        #   first step
+        # --------------------------------------------------------
+
+        if self.ml_model.training_data['forces'] != [] or self['mode'] != 'ML':
+            self.set_forces()
+
+        else:
+            results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
+
+            for n, at in enumerate(self.structure):
+                at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
+
+            self.ml_model.retrain(structure=self.structure)
+
+        if self.frame == 0:
+            self.ml_model.set_error_threshold()
+
         self.structure.record_trajectory(self.frame, self.time, position=True, force=True)
 
-        if self['time'] == 0 and  first_euler:
+        if self['time'] == 0 and first_euler:
             self.take_timestep(method='TO_Euler')
 
-        # ------------------------
-        #  Primary iteration loop
-        # ------------------------
-        while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
+        # --------------------------------------------------------
+        #   iterate through frames
+        # --------------------------------------------------------
 
-            self.take_timestep(method=self['timestep_method'])
+        while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
             if self.mode == 'ML':
 
-                if self.ml_model.gauge_uncertainty():
+                if self.ml_model.is_var_inbound():
                     continue
+
+                # if not, compute DFT, retrain model, move on
                 else:
-                    if self.verbosity==2: print("Timestep with unacceptable uncertainty detected! \n Rewinding one step, and calling espresso to re-train the model.")
-                    self.qe_config.run_espresso(self.structure, self.cell, cnt=self.frame_cnt,
-                                                iscorrection=True)
-                    self.ml_model.retrain(self.structure)
-                    self.take_timestep(dt= -self['dt'])
+                    self.frame_cnt += 1
+
+                    if self.verbosity == 2:
+                        print("Timestep with unacceptable uncertainty detected! \n "
+                              "Calling espresso to re-train the model.")
+
+                    results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
+
+                    self.ml_model.retrain(structure=self.structure)
+
+                    for n, at in enumerate(self.structure):
+                        at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
+
+            self.take_timestep(method=self['timestep_method'])
+
 
         self.conclude_run()
 
     # TODO: Implement end-run report
     def conclude_run(self):
         print("===============================================================\n")
-        print("Run concluded. Final positions and energy of configuration:\n")
-        print("Energy:", self.get_energy(), '\n')
+
+        if self.ml_model.target == 'f':
+            print("Run concluded. Final positions:\n")
+            print(self.structure.get_positions())
+
+        else:
+            raise ValueError("Energy target not implemented yet. Stay tuned.")
+
         print(self.get_report(forces=True))
 
     def get_report(self, forces=True, velocities=False, time_elapsed=0):
@@ -345,46 +378,38 @@ class MD_Engine(MD_Config):
 
         Args:
 
-            :param forces:      (bool) Determines if forces will be printed.
-            :param velocities:  (bool) Determines if velocities will be printed.
+            :param forces:       (bool) Determines if forces will be printed.
+            :param velocities:   (bool) Determines if velocities will be printed.
             :param time_elapsed: (float) Puts elapsed time for a frame into the report
         """
-        report = 'Frame#:{},SystemTime:{},ElapsedTime{}:\n'.format(self['frame'], np.round(self['time'], 3),
-                                                                   np.round(time_elapsed, 3))
-        report += 'Atom,Element,Position'
-        report += ',Force' if forces else ''
+
+        # TODO: we could format this more nicely
+        report = 'Frame: {}, System Time: {}, Elapsed Time: {}\n'.format(self['frame'], np.round(self['time'], 3),
+                                                                         np.round(time_elapsed, 3))
+        report += 'Atom | Element |\t\tPosition\t'
+        report += '\t\t|\t\tForce' if forces else ''
         report += ',Velocity' if velocities else ''
         report += '\n'
         for n, at in enumerate(self.structure):
-            report += '{},{},{}{}{} \n'.format(n, at.element, str(tuple([np.round(x, 4) for x in at.position])),
-                                               ',' + str(
-                                                   tuple([np.round(v, 4) for v in at.velocity])) if velocities else '',
-                                               ',' + str(tuple([np.round(f, 4) for f in at.force])) if forces else '')
+            report += '{}    |    {}    | {} {} {} \n'.format(n, at.element,
+                                                              str(tuple([np.round(x, 4) for x in at.position])),
+                                                              '|' + str(
+                                                                  tuple([np.round(v, 4) for v in
+                                                                         at.velocity])) if velocities else '',
+                                                              '| ' + str(tuple([np.round(f, 4) for f in
+                                                                                at.force])) if forces else '')
 
         return report
 
 
 def main():
-    # setup
     config = load_config_yaml('H2_test.yaml')
-
-    # qe
     qe_config = QE_Config(config['qe_params'], warn=True)
-    # pprint.pprint(qe_config)
-
-    struc_config = Structure_Config(config['structure_params']).to_structure()
-    # qe_config.run_espresso(struc_config, augment_db=True)
-    # pprint.pprint(struc_config)
-
+    structure = Structure_Config(config['structure_params']).to_structure()
     ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
-    # # pprint.pprint(ml_config_)
-    #
     md_config = MD_Config(params=config['md_params'], warn=True)
-    # # pprint.pprint(md_config)
+    engine = MD_Engine(structure, md_config, qe_config, ml_config_)
 
-    engine = MD_Engine(struc_config, md_config, qe_config, ml_config_)
-    # print(engine)
-    #
     engine.run()
 
 

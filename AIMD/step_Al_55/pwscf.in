@@ -1,0 +1,41 @@
+&CONTROL
+	prefix = 'Al'
+	wf_collect = .false.
+	disk_io = 'low'
+	outdir = '/Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/AIMD/step_Al_55'
+	calculation = 'scf'
+	pseudo_dir = '/Users/simonbatzner1/QE/qe-6.0/pseudo'
+	tprnfor = .true.
+/ 
+&SYSTEM
+	nat = 4
+	smearing = 'mp'
+	ntyp = 1
+	ibrav = 0
+	degauss = 0.02
+	ecutwfc = 5.0
+	ecutrho = 40.0
+	occupations = 'smearing'
+/ 
+&ELECTRONS
+	diagonalization = 'david'
+	conv_thr = 1e-07
+	mixing_beta = 0.5
+/ 
+&IONS
+/ 
+&CELL
+/ 
+K_POINTS {automatic}
+ 1 1 1  0 0 0
+ATOMIC_SPECIES
+  Al 26.9815385 Al.pz-vbc.UPF
+CELL_PARAMETERS {angstrom}
+ 4.1 0.0 0.0
+ 0.0 4.1 0.0
+ 0.0 0.0 4.1
+ATOMIC_POSITIONS {angstrom}
+  Al -0.14375 -0.20278 -0.30378
+  Al -0.02713 1.95218 2.23416
+  Al 2.39832 -0.22629 2.07190
+  Al 2.22946 2.35007 -0.06360

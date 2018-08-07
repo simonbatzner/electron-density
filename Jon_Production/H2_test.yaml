@@ -6,7 +6,7 @@ structure_params:
   #  - ['H', [.75,.75,.75]]
   pos:                  # CANNOT HAVE BOTH
     - ['H', [2.5,2.5,2.5]]   # CANNOT HAVE BOTH
-    - ['H', [3.5,2.5,2.5]]
+    - ['H', [4.5,2.5,2.5]]
   lattice:
     - [5,0,0]
     - [0,5,0]
@@ -36,13 +36,17 @@ md_params:
 
   write_outfile: 'H2_test.out'
 
-  energy_or_force: 'Energy' # 'Energy' | 'Force | 'Both'
+  energy_or_force: 'Force' # 'Energy' | 'Force | 'Both'
 
 
 
 ml_params:
 
   regression_model: GP
+
+  sklearn: True
+
+  training_dir: None
 
   gp_params:
     length_scale: 1
@@ -112,5 +116,5 @@ qe_params:
 
 
 hpc_params:
-  processes: 360
+  processes: 1
   par: 1

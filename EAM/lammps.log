@@ -1,0 +1,99 @@
+LAMMPS (11 Aug 2017)
+
+# ---------- 1. Initialize simulation ---------------------
+units metal
+atom_style atomic
+dimension  3
+boundary   p p p
+read_data /Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/EAM/lammps.data
+  orthogonal box = (0 0 0) to (27.5065 23.8213 40.213)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  1000 atoms
+
+# ---------- 2. Specify interatomic potential ---------------------
+pair_style eam
+pair_coeff * * /usr/local/Cellar/lammps/2017-08-11_4/bin/pots/Pd_u3.eam
+Reading potential file /usr/local/Cellar/lammps/2017-08-11_4/bin/pots/Pd_u3.eam with DATE: 2007-06-11
+
+# -- include optimization of the unit cell parameter
+#fix 1 all box/relax iso 0.0 vmax 0.001
+
+# -- fix all layers except for top two layers
+group bottom id 1:900
+900 atoms in group bottom
+group top id 901:1000
+100 atoms in group top
+
+fix 2 bottom setforce 0.0 0.0 0.0
+velocity bottom set 0.0 0.0 0.0
+
+# -- enable optimization of atomic positions (and the cell)
+min_style cg
+minimize 1e-10 1e-10 100000 10000000
+WARNING: Using 'neigh_modify every 1 delay 0 check yes' setting during minimization (../min.cpp:168)
+Neighbor list info ...
+  update every 1 steps, delay 0 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 7.3
+  ghost atom cutoff = 7.3
+  binsize = 3.65, bins = 8 7 12
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair eam, perpetual
+      attributes: half, newton on
+      pair build: half/bin/atomonly/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 4.165 | 4.165 | 4.165 Mbytes
+Step Temp E_pair E_mol TotEng Press 
+       0            0   -3808.1424            0   -3808.1424   -12823.302 
+       4            0   -3809.3627            0   -3809.3627   -9315.5593 
+Loop time of 0.0186682 on 1 procs for 4 steps with 1000 atoms
+
+96.7% CPU use with 1 MPI tasks x no OpenMP threads
+
+Minimization stats:
+  Stopping criterion = energy tolerance
+  Energy initial, next-to-last, final = 
+        -3808.14242027     -3809.36265047     -3809.36265047
+  Force two-norm initial, final = 3.22402 1.23544e-05
+  Force max component initial, final = 0.322416 2.29122e-06
+  Final line search alpha, max atom move = 1 2.29122e-06
+  Iterations, force evaluations = 4 8
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0.018264   | 0.018264   | 0.018264   |   0.0 | 97.83
+Neigh   | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 9.799e-05  | 9.799e-05  | 9.799e-05  |   0.0 |  0.52
+Output  | 0          | 0          | 0          |   0.0 |  0.00
+Modify  | 4.3154e-05 | 4.3154e-05 | 4.3154e-05 |   0.0 |  0.23
+Other   |            | 0.0002635  |            |       |  1.41
+
+Nlocal:    1000 ave 1000 max 1000 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:    1544 ave 1544 max 1544 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:    58600 ave 58600 max 58600 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 58600
+Ave neighs/atom = 58.6
+Neighbor list builds = 0
+Dangerous builds = 0
+
+
+# ---- 4. Define and print useful variables -------------
+variable natoms equal "count(all)"
+variable totenergy equal "pe"
+variable length equal "lx"
+
+print "Total energy (eV) = ${totenergy}"
+Total energy (eV) = -3809.36265046765
+print "Number of atoms = ${natoms}"
+Number of atoms = 1000
+print "Lattice constant (Angstoms) = ${length}"
+Lattice constant (Angstoms) = 27.5064539987641
+        
+Total wall time: 0:00:00

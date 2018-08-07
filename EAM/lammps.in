@@ -1,0 +1,36 @@
+
+# ---------- 1. Initialize simulation ---------------------
+units metal
+atom_style atomic
+dimension  3
+boundary   p p p
+read_data /Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/EAM/lammps.data
+
+# ---------- 2. Specify interatomic potential ---------------------
+pair_style eam
+pair_coeff * * /usr/local/Cellar/lammps/2017-08-11_4/bin/pots/Pd_u3.eam
+
+# -- include optimization of the unit cell parameter
+#fix 1 all box/relax iso 0.0 vmax 0.001
+
+# -- fix all layers except for top two layers
+group bottom id 1:900
+group top id 901:1000
+
+fix 2 bottom setforce 0.0 0.0 0.0
+velocity bottom set 0.0 0.0 0.0
+
+# -- enable optimization of atomic positions (and the cell)
+min_style cg
+minimize 1e-10 1e-10 100000 10000000
+
+
+# ---- 4. Define and print useful variables -------------
+variable natoms equal "count(all)"
+variable totenergy equal "pe"
+variable length equal "lx"
+
+print "Total energy (eV) = ${totenergy}"
+print "Number of atoms = ${natoms}"
+print "Lattice constant (Angstoms) = ${length}"
+        

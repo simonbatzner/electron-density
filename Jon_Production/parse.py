@@ -62,10 +62,9 @@ class ml_config(dict):
 
     def __init__(self, params, print_warn=True):
 
-        self._params=['regression_model','gp_params','fingerprint_params',
-                      'training_folder','correction_folder']
+        self._params = ['regression_model', 'gp_params', 'fingerprint_params',
+                        'training_folder', 'correction_folder']
         super(ml_config, self).__init__()
-
 
         # init with default
         if params:
@@ -76,6 +75,8 @@ class ml_config(dict):
 
         # default parameters for machine learning model
         default_ml = {'regression_model': 'GP',
+                      'sklearn': False,
+                      'training_dir': None,
                       'gp_params': {'length_scale': 1,
                                     'length_scale_min': 1e-5,
                                     'length_scale_max': 1e5,
@@ -308,10 +309,8 @@ class Structure(list):
         print("Warning! Element {} not found in structure".format(element))
         raise Exception("Tried to get mass of a species that didn't exist in structure.")
 
-
-
-    #TODO test this
-    def rewind(self,frame,current_frame=-1):
+    # TODO test this
+    def rewind(self, frame, current_frame=-1):
         """
 
         :param frame:  integer denoting which 'frame' to rewind the structure to
@@ -327,12 +326,11 @@ class Structure(list):
             if self.trajectory[frame]['velocities']:
                 at.velocity = self.trajectory[frame]['velocities'][n]
 
-        if current_frame!=-1:
-            for m in range(frame+1,current_frame+1):
+        if current_frame != -1:
+            for m in range(frame + 1, current_frame + 1):
                 del self.trajectory[m]
 
         return frame
-
 
     @property
     def symbols(self):
@@ -414,25 +412,21 @@ class Structure_Config(dict):
             self['lattice'] = np.array(self['lattice'])
             self['unit_cell'] = self['alat'] * np.array([self['lattice'][0], self['lattice'][1], self['lattice'][2]])
 
-
         if self['lattice'].shape != (3, 3):
             print("WARNING! Inappropriately shaped cell passed as input to structure!")
             raise Exception('Lattice has shape', np.shape(self['lattice']))
-
-
 
         if self.get('pos', False) and self.get('frac_pos', False):
             print("Warning! Positions AND fractional positions were given--"
                   "This is not intended use! You must select one or the other in your input.")
             raise Exception("Fractional position AND Cartesian positions given.")
 
-
         if self.get('frac_pos', False):
 
             for position in self['frac_pos']:
                 vec = position[1]
-                newpos = self['lattice'][0]*vec[0] + self['lattice'][1]*vec[1] + self['lattice'][2]*vec[2]
-                self.positions.append(list([position[0],newpos]))
+                newpos = self['lattice'][0] * vec[0] + self['lattice'][1] * vec[1] + self['lattice'][2] * vec[2]
+                self.positions.append(list([position[0], newpos]))
 
         if self.get('pos', False):
             self.positions = self['pos']
@@ -458,7 +452,7 @@ class Structure_Config(dict):
     def to_structure(self):
 
         mass_dict = {'H': 1.0, 'C': 12.01, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994,
-                     'Pd': 106.42, 'Au':196.96655, 'Ag':‎ 107.8682}
+                     'Pd': 106.42, 'Au': 196.96655, 'Ag': 107.8682}
 
 
         atoms = []
@@ -638,11 +632,10 @@ class QE_Config(dict):
             if not self['pwscf_input'].get(s, False):
                 self['pwscf_input'][s] = {}
 
-
-        #--------------
+        # ------------------------
         # Augmentation DB Options
-        #---------------
-        if self.get('store_all',False):
+        # ------------------------
+        if self.get('store_all', False):
             self.store_always = True
         else:
             self.store_always = False
@@ -669,7 +662,7 @@ class QE_Config(dict):
         d["@class"] = self.__class__.__name__
         return d
 
-    def run_espresso(self, structure, cnt= -1, augment_db=False):
+    def run_espresso(self, structure, cnt=-1, augment_db=False):
         """
         Sets up the directory where pwscf is to be run; then, calls pw.x.
         Changes depending on if an augmentation run is being called i.e. one which is
@@ -699,7 +692,7 @@ class QE_Config(dict):
         output_file = self.execute_qe_pwscf(runpath, runpath)
 
         output = self.parse_qe_pwscf_output(output_file)
-        
+
         return output
 
     @staticmethod
@@ -712,9 +705,12 @@ class QE_Config(dict):
         kpoints = None
         volume = None
 
-        # Flags to start collecting final coordinates
+        # Flags to start collecting intial and final coordinates
         final_coords = False
         get_coords = False
+        initial_coords = False
+        initial_positions = []
+        prev_ = False
 
         with open(outfile, 'r') as outf:
             for line in outf:
@@ -738,6 +734,27 @@ class QE_Config(dict):
                     line = line.split('(')[0]
                     line = line.strip()
                     volume = float(line)
+
+                # --------------------------------------------------------
+                # positions, get the initial positions of atoms
+                # --------------------------------------------------------
+                if line.lower().startswith('   cartesian axes'):
+                    initial_coords = True
+                    continue
+
+                if line.lower().startswith('     site') and initial_coords == True:
+                    prev_ = True
+                    continue
+
+                if prev_ == True and initial_coords == True and line.split() != []:
+                    line = line.split()
+
+                    try:
+                        initial_positions.append([float(line[-4]), float(line[-3]), float(line[-2])])
+                    except:
+                        initial_coords = False
+
+                    continue
 
                 ## Chunk of code meant to get the final coordinates of the atomic positions
                 if line.lower().startswith('begin final coordinates'):
@@ -766,7 +783,7 @@ class QE_Config(dict):
             print("WARNING! ")
             raise Exception("Quantum ESPRESSO parser failed to read the file {}. Run failed.".format(outfile))
 
-        result = {'energy': total_energy, 'kpoints': kpoints, 'volume': volume, 'positions': positions}
+        result = {'energy': total_energy, 'kpoints': kpoints, 'volume': volume, 'positions': positions, 'inital_positions': initial_positions}
         if forces:
             result['forces'] = forces
         if total_force is not None:
@@ -789,7 +806,7 @@ class QE_Config(dict):
             par_string = ''
             for par, val in self['parallelization'].items():
                 par_string += '-{} {}'.format(par, val) if val != 0 else ''
-            pw_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(pw_command, par_string, inpath, out_file)
+            pw_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(pw_command, par_string, inpath, outpath)
 
         run_command(pw_command)
         return outpath
@@ -964,20 +981,20 @@ def setup_configs(path, verbose=True):
 
 
 def main():
-    # load from config file
+    # # load from config file
     config = load_config_yaml('input.yaml')
     print(type(config))
-
+    #
     # # # set configs
     # qe_conf = QE_Config(config['qe_params'], warn=True)
-    # print(qe_conf)
+    # # print(qe_conf)
     #
     # structure = Structure_Config(config['structure_params']).to_structure()
-    # print(structure)
+    # # print(structure)
     #
     # print(qe_conf.run_espresso(structure))
     #
-    # # ml_fig = ml_config(params=config['ml_params'], print_warn=True)
+    # ml_fig = ml_config(params=config['ml_params'], print_warn=True)
     # # print(ml_fig)
     #
     # md_fig = MD_Config(params=config['md_params'], warn=True)
