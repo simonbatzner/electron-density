@@ -116,5 +116,5 @@ qe_params:
 
 
 hpc_params:
-  processes: 360
+  processes: 1
   par: 1

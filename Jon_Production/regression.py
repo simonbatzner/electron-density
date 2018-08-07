@@ -156,7 +156,6 @@ class RegressionModel:
             self.training_data['forces'].append(forces[n][0])
             self.training_data['forces'].append(forces[n][1])
             self.training_data['forces'].append(forces[n][2])
-            print("updated training data")
 
     def normalize_symm(self):
         """Normalize the symmetry vectors in the training set"""
@@ -209,7 +208,7 @@ class GaussianProcess(RegressionModel):
 
     def __init__(self, training_dir=None, kernel='rbf', length_scale=1, length_scale_min=1e-5, length_scale_max=1e5,
                  force_conv=25.71104309541616, thresh_perc=.2, eta_lower=0, eta_upper=2, eta_length=10, cutoff=8,
-                 sigma=1, n_restarts=10, correction_folder='.', target='f', verbosity=1, sklearn=False):
+                 sigma=1, n_restarts=0, correction_folder='.', target='f', verbosity=1, sklearn=False):
 
         """ Initialization """
         self.length_scale = float(length_scale)
@@ -217,9 +216,10 @@ class GaussianProcess(RegressionModel):
         self.verbosity = verbosity
 
         # predictions
-        # TODO: see if these should be replaced by lists - check dependencies
+        # TODO: see if these should be replaced by a list - check dependencies
         self.pred = None
-        self.pred_var = None
+        self.mean_pred_var = None
+        self.pred_vars = []
 
         # store uncertainties of model as {frame: var} dict
         self.var_dict = None
@@ -302,6 +302,7 @@ class GaussianProcess(RegressionModel):
 
             self.forces_curr = []
             self.tot_force = []
+            self.pred_vars = []
 
             # symmetrize atomic environment
             for cnt in range(len(structure.get_positions())):
@@ -327,7 +328,7 @@ class GaussianProcess(RegressionModel):
                     if self.sklearn:
 
                         force_pred, std_pred = gp_pred(symm=symm_norm, norm_fac=norm_fac, gp=self.model)
-                        self.pred_var = (std_pred * self.force_conv) ** 2
+                        self.pred_vars.append((std_pred * self.force_conv) ** 2)
 
                     else:
 
@@ -340,12 +341,15 @@ class GaussianProcess(RegressionModel):
                         force_pred = force_pred * norm_fac
 
                         # TODO: check with Steven about unit conversion
-                        self.pred_var = pred_var * self.force_conv ** 2
+                        self.pred_vars.append(pred_var * self.force_conv ** 2)
 
                     # TODO: CLEAR UP THIS INDENTATION
                     # store forces and error
                     self.forces_curr[cnt].append(force_pred)
                     self.tot_force.append(np.abs(force_pred * self.force_conv))
+
+            # compute average predictive variance against which treshol uncertainty will be compared
+            self.mean_pred_var = np.mean(self.pred_vars)
 
             return self.forces_curr
 
@@ -361,7 +365,10 @@ class GaussianProcess(RegressionModel):
 
     def is_var_inbound(self):
         """Returns boolean of whether the model's predictive variance lies within the error threshold"""
-        return self.err_thresh > self.pred_var
+
+        # TODO: Jon compared against stddev, not var - need to choose one
+        print(np.sqrt(self.mean_pred_var))
+        return self.err_thresh > np.sqrt(self.mean_pred_var)
 
     def get_uncertainty(self):
         """Return dict of models predictive variances as d = {frame: var}"""
