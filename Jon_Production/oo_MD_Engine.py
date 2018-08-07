@@ -313,7 +313,11 @@ class MD_Engine(MD_Config):
             self.set_forces()
 
         else:
-            self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
+            results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
+
+            for n, at in enumerate(self.structure):
+                at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
+
             self.ml_model.retrain(structure=self.structure)
 
         if self.frame == 0:
@@ -343,9 +347,12 @@ class MD_Engine(MD_Config):
                         print("Timestep with unacceptable uncertainty detected! \n "
                               "Calling espresso to re-train the model.")
 
-                    self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
+                    results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
+
                     self.ml_model.retrain(structure=self.structure)
-                    self.set_forces()
+
+                    for n, at in enumerate(self.structure):
+                        at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
 
             self.take_timestep(method=self['timestep_method'])
 
