@@ -20,32 +20,8 @@ import numpy.linalg as la
 from util.util import prepare_dir
 from Jon_Production.utility import write_file, run_command
 
+from utility import flatten_dict,dotdict
 
-# TODO: Move this to utility file once we're done with everything else
-def flatten_dict(d):
-    """
-    Recursively flattens dictionary
-    :param d: dict to flatten
-    :return: flattened dict
-    """
-
-    def expand(key, value):
-        if isinstance(value, dict):
-            return [(key + '.' + k, v) for k, v in flatten_dict(value).items()]
-        else:
-            return [(key, value)]
-
-    items = [item for k, v in d.items() for item in expand(k, v)]
-
-    return dict(items)
-
-
-# TODO: Move this to utility file once we're done with everything else here
-class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
 
 
 # ------------------------------------------------------
@@ -930,18 +906,19 @@ class HPC_Config(dict):
 # ------------------------------------------------------------
 
 
-def load_config_yaml(path, verbose=True):
+def load_config_yaml(path, verbose=True,update={}):
     """"
     Loads configuration from input.yaml,
     """
     if not os.path.isfile(path) and verbose:
-        raise OSError('Configuration file does not exist.')
+        raise FileNotFoundError('Configuration file not found.')
 
     with open(path, 'r') as stream:
         try:
             out = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             print(exc)
+            raise Exception("Parsing of the yaml file failed. Is the format wrong?")
 
         return out
 
@@ -987,7 +964,7 @@ def main():
     #
     # # # set configs
     # qe_conf = QE_Config(config['qe_params'], warn=True)
-    # # print(qe_conf)
+    # print(qe_conf)
     #
     # structure = Structure_Config(config['structure_params']).to_structure()
     # # print(structure)
