@@ -205,6 +205,7 @@ class MD_Engine(MD_Config):
         """
         tick = ti.time()
         if self['verbosity'] >= 3:
+            # TODO: add time_elapsed argument
             print(self.get_report(forces=True))
 
         # TODO: Make sure that this works when dt is negative,

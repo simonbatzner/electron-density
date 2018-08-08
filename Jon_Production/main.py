@@ -67,21 +67,27 @@ cutoff = 8  # in angstrom
 ecut = 18.0  # plane wave cutoff energy
 nk = 4  # size of kpoint grid
 dim = 3  # size of supercell
+
+# debug config
+ecut = 5.0  # plane wave cutoff energy
+nk = 1  # size of kpoint grid
+dim = 1 # size of supercell
+
 nat = 2 * dim ** 3  # number of atoms in supercell
 pert_size = 0.05 * alat  # size of initial perturbation
 npool = 36  # number of k-pt pools
 
 # QE locations
-pseudo_dir = '/n/home03/jonpvandermause/qe-6.2.1/pseudo'
-outdir = '/n/home03/jonpvandermause/Production'
-pw_loc = '/n/home03/jonpvandermause/qe-6.2.1/bin/pw.x'
+pseudo_dir = os.environ['ESPRESSO_PSEUDO']
+outdir = os.environ['ML_HOME']
+pw_loc = os.environ['PWSCF_COMMAND']
 in_file = 'scf_13.in'
 out_file = 'scf_13.out'
 update_name = 'update_13.txt'
 
 # parallelization
-pool = mp.Pool(processes=360)
-par = 1  # if 1, parallelize by atom (faster)
+pool = mp.Pool(processes=2)
+par = 0  # if 1, parallelize by atom (faster)
 
 # ------------------------------------------------------
 #             perform on-the-fly run
