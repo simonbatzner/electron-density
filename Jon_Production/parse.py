@@ -20,7 +20,7 @@ import numpy.linalg as la
 from util.util import prepare_dir
 from Jon_Production.utility import write_file, run_command
 
-from utility import flatten_dict,dotdict
+from Jon_Production.utility import flatten_dict,dotdict
 
 
 
@@ -32,15 +32,36 @@ from utility import flatten_dict,dotdict
 class ml_config(dict):
     """
     Creates an ml_config object.
+
     Args:
         params (dict): A set of input parameters as a dictionary.
     """
 
-    def __init__(self, params, print_warn=True):
+    def __init__(self, params=None, print_warn=True):
 
         self._params = ['regression_model', 'gp_params', 'fingerprint_params',
                         'training_folder', 'correction_folder']
+
+        if params is None:
+            params = {}
+
+        if not isinstance(params,dict):
+            print("Warning!! Parameter passed that is not a dictionary. Did parsing the yaml file work right?")
+
+        # Draw some parameters from the environment
+        for key in ['correction_folder']:
+            if params.get(key,'')=='ENVIRONMENT':
+                # Sets to False if not found in environment to throw warning later
+                # Check for lower and uppercase versions
+                params[key]=os.environ.get(key, False) or os.environ.get(key.upper(), False)
+
+
+
+
+
         super(ml_config, self).__init__()
+
+
 
         # init with default
         if params:
@@ -74,8 +95,16 @@ class ml_config(dict):
             if flat.get(key, rand) == rand:
                 missing.append(key)
 
-        if print_warn and missing != []:
-            print("WARNING! Missing ML parameter, running model with default for: {}".format(missing))
+        # If the regresion model is set in the input file, it is assumed that the user
+        # has set up the yaml file mostly correctly
+
+        if print_warn and missing != [] and not self.get('regression_model',False):
+            print("WARNING! Missing ML parameters, running model with default for: {}".format(missing))
+
+            # Overwrites default parameters with the set ones
+            # and then sets all unset parameters with defaults as the default value
+            default_ml.update(self)
+            self.update(default_ml)
 
 
 # ------------------------------------------------------
@@ -155,9 +184,9 @@ class Atom(object):
         # Used in Verlet integration
         self.prev_pos = np.array(self.position)
         self.initial_pos = self.position if self.position.all != (0, 0, 0) else initial_pos
-        # Boolean which signals if the coordinates are fractional in their original cell
+
         self.constraint = list(constraint)
-        self.fingerprint = random.rand()  # This is how I tell atoms apart. Easier than indexing them manually...
+        self.fingerprint = random.rand()  # A way to easily differentiate between atoms
 
         self.mass = mass or 1.0
 
@@ -255,7 +284,8 @@ class Structure(list):
         print(" \t [ {},{},{}]".format(lattice[1, 0], lattice[1, 1], lattice[1, 2]))
         print(" \t [ {},{},{}]]".format(lattice[2, 0], lattice[2, 1], lattice[2, 2]))
 
-    def record_trajectory(self, frame, time=None, position=False, velocity=False, force=False, energy=None,
+    def record_trajectory(self, frame, time=None, position=False,
+                          velocity=False, force=False, energy=None,
                           elapsed=None):
 
         if not self.trajectory.get(frame, False):
@@ -317,6 +347,14 @@ class Structure(list):
         return [at.position for at in self.atoms]
 
     @property
+    def velocities(self):
+        return [at.velocity for at in self.atoms]
+
+    @property
+    def forces(self):
+        return [at.force for at in self.atoms]
+
+    @property
     def n_atoms(self):
         return len(self.atoms)
 
@@ -358,12 +396,14 @@ class Structure_Config(dict):
     possible parameters.
     Populated by dictionary loaded in from an input.yaml file.
     Used by the Structure class to instantiate itself.
+
+
     """
 
     def __init__(self, params, warn=True):
 
         self._params = ['lattice', 'alat', 'position', 'frac_pos', 'pos', 'fractional',
-                        'unit_cell', 'pert_size', 'elements']
+                        'unit_cell', 'pert_size', 'elements','vels']
         self['lattice'] = None
 
         if params:
@@ -411,12 +451,14 @@ class Structure_Config(dict):
             self['elements'].append(atom[0])
 
         # mass: force mass to type float if is integer or float
-        if self.get('mass', False) and type(self.get('mass')) != type(list):
+        if self.get('mass', False) and not isinstance(self.get('mass'),list):
             self['mass'] = float(self['mass'])
+        elif isinstance(self.get('mass'),list):
+            if len(self.get('mass'))!=len(self.positions):
+                print("Warning! List of masses provided is unequal in length to number of atoms provided.")
+                raise Exception("List of masses is unequal to number of atoms provided.")
         else:
             self['mass'] = 0
-
-        # TODO: add support for list of mass
 
         if self.get('pert_size', False):
             for pos in self.positions:
@@ -429,7 +471,6 @@ class Structure_Config(dict):
 
         mass_dict = {'H': 1.0, 'C': 12.01, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994,
                      'Pd': 106.42, 'Au': 196.96655, 'Ag': 107.8682}
-
 
         atoms = []
         for n, pos in enumerate(self.positions):
@@ -446,8 +487,10 @@ class Structure_Config(dict):
             else:
                 force = (0, 0, 0)
 
-            if type(self['mass']) != type(list) and self['mass'] != 0:
+            if not isinstance(self['mass'], list) and self['mass'] != 0:
                 mass = self['mass']
+            elif isinstance(self['mass'],list):
+                mass=self['mass'][n]
             else:
                 mass = mass_dict.get(pos[0], 1.0)
 
@@ -474,17 +517,16 @@ def ase_to_structure(struc, alat, fractional, perturb=0):
     positions = struc.get_positions()
     symbols = struc.get_chemical_symbols()
     lattice = struc.get_cell
+    masses = struc.get_masses()
 
     atoms = []
     for n in range(len(positions)):
-        atoms.append(Atom(position=positions[n], element=symbols[n]))
+        atoms.append(Atom(position=positions[n], element=symbols[n],mass=masses[n]))
 
-    # TODO ADD THIS
     if perturb > 0:
         for at in atoms:
             for coord in range(3):
                 at.position[coord] += random.normal(0, scale=perturb)
-        pass
 
     return Structure(atoms, alat=alat, lattice=np.array(lattice), fractional=fractional)
 
@@ -509,10 +551,36 @@ class QE_Config(dict):
         if params is None:
             params = {}
 
+        if not isinstance(params,dict):
+            print("Warning!! Parameter passed that is not a dictionary. Did parsing the yaml file work right?")
+
         self._params = ['nk', 'system_name',
                         'pseudo_dir', 'outdir', 'pw_command', 'in_file',
                         'out_file', 'update_name', 'correction_folder',
                         'molecule', 'serial']
+
+        # Some parameters can be drawn from the environment
+        for key in ['pw_command','correction_folder']:
+            if params.get(key,'')=='ENVIRONMENT':
+                # Sets to False if not found in environment to throw warning later
+                # Check for lower and uppercase versions
+                params[key]=os.environ.get(key,False) or os.environ.get(key.upper(),False)
+
+        # #OTOD @SIMON So there's actually nothing wrong with this block below,
+        #  I just wanted you to look at this and see that
+        #  it's kind of funny, isn't it?
+        # You have to do this 'jenga tower' because the pseudo_dir key is nested
+        # deep within a few layers of the yaml file.... You can delete this when you read this--
+        # I just think it's amusing.
+
+        if params.get('pwscf_input',False):
+            if params['pwscf_input'].get('CONTROL',False):
+                if params['pwscf_input']['CONTROL'].get('pseudo_dir',False)=='ENVIRONMENT':
+                    key= 'pseudo_dir'
+                    params['pwscf_input']['CONTROL']['pseudo_dir'] = os.environ.get(key,False) or os.environ.get(key.upper(),False)
+
+
+
 
         super(QE_Config, self).__init__()
 
@@ -923,19 +991,26 @@ def load_config_yaml(path, verbose=True,update={}):
         return out
 
 
-# TODO Make this a nice all-in-one loader
-def setup_configs(path, verbose=True):
+def parse_and_setup(path, verbose=True):
+    """
+    All-in-one function which parses a yaml file and returns each configuration item
+    which parameterizes an MD engine.
+
+    :param path:
+    :param verbose:
+    :return:
+    """
     setup_dict = load_config_yaml(path, verbose=verbose)
 
     if 'md_params' in setup_dict.keys():
-        md = MD_Config(setup_dict['md_params'])
+        md_config = MD_Config(setup_dict['md_params'])
     else:
-        md = MD_Config({})
+        md_config = MD_Config({})
 
     if 'qe_params' in setup_dict.keys():
-        qe = QE_Config(setup_dict['qe_params'])
+        qe_config = QE_Config(setup_dict['qe_params'])
     else:
-        qe = QE_Config({})
+        qe_config = QE_Config({})
 
     if 'structure_params' in setup_dict.keys():
         structure = Structure_Config(setup_dict['structure_params']).to_structure
@@ -945,22 +1020,18 @@ def setup_configs(path, verbose=True):
         structure = Structure_Config({})
 
     if 'ml_params' in setup_dict.keys():
-        ml = ml_config(setup_dict['ml_params'])
-
-        if ml_config['regression_model'] == 'GP':
-            pass
-            # ml= GaussianProcess() #TODO: integrate this with Simon's new classes
-
+        ml_config = ml_config(setup_dict['ml_params'])
     else:
         ml = ml_config(params=setup_dict['ml_params'], print_warn=True)
 
-    return structure, md,
+    return structure, md_config, ml_config, qe_config, hpc_config
 
 
 def main():
     # # load from config file
     config = load_config_yaml('input.yaml')
     print(type(config))
+    #setup_configs('input.yaml')
     #
     # # # set configs
     # qe_conf = QE_Config(config['qe_params'], warn=True)

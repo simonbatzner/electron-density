@@ -10,9 +10,9 @@ import time as ti
 import numpy as np
 import numpy.linalg as la
 
-from parse import load_config_yaml, QE_Config, Structure_Config, ml_config, MD_Config
+from Jon_Production.parse import load_config_yaml, QE_Config, Structure_Config, ml_config, MD_Config
 from utility import first_derivative_2nd, first_derivative_4th
-from regression import GaussianProcess
+from Jon_Production.regression import GaussianProcess
 
 mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994}
 

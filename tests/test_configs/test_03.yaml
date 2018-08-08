@@ -1,12 +1,6 @@
 
 structure_params:
-  alat: 5.0
-
-  # set either frac_pos or pos, not both
-
-  #frac_pos:
-  #  - ['H', [.25,.25,.25]]
-  #  - ['H', [.75,.75,.75]]
+  alat: 1.0
   pos:
     - ['H', [2.5,2.5,2.5]]
     - ['H', [4.5,2.5,2.5]]
@@ -23,7 +17,7 @@ md_params:
   comment: This is a test of the yaml framework.
 
   # set to: ML or AIMD or LJ
-  mode: ML
+  mode: AIMD
 
   ti: 0.0
   frames: 2
