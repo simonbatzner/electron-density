@@ -1,0 +1,22 @@
+Best parameters set found on development set:
+Best parameters set found on development set:
+Best parameters set found on development set:
+{"n_estimators": 20, "max_depth": 20}MSE on training data: 0.00013048630505390832
+MSE on test data: 0.0008826538087864144Number of estimators: 10Maximum depth: 10
+
+
+		Pred 	| 	True
+Number of estimators: 10Maximum depth: 10
+
+
+
+MSE on training data: 0.00023867049899051418
+MSE on test data: 0.0010850094572370842Best parameters set found on development set:
+{"n_estimators": 20, "max_depth": 20}
+
+MSE on training data: 3.6201901831724445e-05
+MSE on test data: 0.0001299092260632268Best parameters set found on development set:
+{"max_depth": 10, "n_estimators": 20}
+
+MSE on training data: 3.285331691414883e-05
+MSE on test data: 9.654882703882886e-05
