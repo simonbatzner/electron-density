@@ -537,6 +537,34 @@ def first_derivative_4th(fmm, fm, fp, fpp, h):
 
     return (fmm / 12. - 2 * fm / 3. + 2 * fp / 3. - fpp / 12.) / float(h)
 
+
+# ------------------------------------------------------
+#               Standard Python Object Helpers
+# ------------------------------------------------------
+
+
+def flatten_dict(d):
+    """
+    Recursively flattens dictionary
+    :param d: dict to flatten
+    :return: flattened dict
+    """
+
+    def expand(key, value):
+        if isinstance(value, dict):
+            return [(key + '.' + k, v) for k, v in flatten_dict(value).items()]
+        else:
+            return [(key, value)]
+
+    items = [item for k, v in d.items() for item in expand(k, v)]
+
+    return dict(items)
+
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
 # ------------------------------------------------------
 #        Homemade Gaussian Process helper functions
 # ------------------------------------------------------

@@ -65,7 +65,12 @@ class RegressionModel:
     """Base class for regression models"""
 
     def __init__(self, model, training_dir, model_type, target, force_conv=25.71104309541616, thresh_perc=.2,
-                 eta_lower=0, eta_upper=2, eta_length=10, cutoff=8, verbosity=1, correction_folder='.'):
+                 eta_lower=0, eta_upper=2, eta_length=10, cutoff=8, verbosity=1, correction_folder=None):
+        # TODO @ SIMON: you previously had a default value for the correction folder;
+        # This interferes with the ability of the parser to detect when there is a mismatch between
+        # the correction folder of ESPRESSO and the ML config.
+        # We can have it set the default to be '.' if neither of them have one set
+        # THEN set it to '.'. CTRL+F "batzman" in the other doc to see how I address this
         """Initialization"""
 
         self.model = model
@@ -88,13 +93,11 @@ class RegressionModel:
 
     def upd_database(self, structure):
         """Add new training data from augmentation folder"""
-
         for file in get_outfiles(self.correction_folder):
 
             if file not in self.aug_files:
 
                 self.aug_files.append(file)
-
                 positions, forces = parse_output(file, target=self.target)
 
                 if positions == [] or forces == []:
@@ -106,7 +109,6 @@ class RegressionModel:
         """Init training database from directory"""
 
         for file in get_outfiles(self.training_dir):
-            print(file)
             positions, forces = parse_output(file, target=self.target)
 
             if positions == [] or forces == []:
@@ -210,7 +212,7 @@ class GaussianProcess(RegressionModel):
 
     def __init__(self, training_dir=None, kernel='rbf', length_scale=1, length_scale_min=1e-5, length_scale_max=1e5,
                  force_conv=25.71104309541616, thresh_perc=.2, eta_lower=0, eta_upper=2, eta_length=10, cutoff=8,
-                 sigma=1, n_restarts=0, correction_folder='.', target='f', verbosity=1, sklearn=False):
+                 sigma=1, n_restarts=0, correction_folder=None, target='f', verbosity=1, sklearn=False):
 
         """ Initialization """
         self.length_scale = float(length_scale)
@@ -228,7 +230,7 @@ class GaussianProcess(RegressionModel):
 
         if self.sklearn:
             # sklearn implementation of a Gaussian Process
-
+            print("SKLEARN ONLINE")
             self.length_scale_min = float(length_scale_min)
             self.length_scale_max = float(length_scale_max)
             self.n_restarts = n_restarts
@@ -368,10 +370,13 @@ class GaussianProcess(RegressionModel):
         else:
             raise ValueError("No proper ML target defined.")
 
-    def is_var_inbound(self):
+    def is_var_inbound(self,verbosity=0):
         """Returns boolean of whether the model's predictive variance lies within the error threshold"""
 
         # TODO: Jon compared against stddev, not var - need to choose one
+
+        if verbosity>=4: print(self.err_thresh,'>?',np.sqrt(self.mean_pred_var))
+
         return self.err_thresh > np.sqrt(self.mean_pred_var)
 
     def get_uncertainty(self):
