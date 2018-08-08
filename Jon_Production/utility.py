@@ -178,7 +178,8 @@ def run_scf(scf_text, in_file, pw_loc, npool, out_file):
     write_file(in_file, scf_text)
 
     # call qe
-    qe_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(pw_loc, npool, in_file, out_file)
+    # qe_command = 'mpirun {0} -npool {1} < {2} > {3}'.format(pw_loc, npool, in_file, out_file)
+    qe_command = '{0} < {1} > {2}'.format(pw_loc, in_file, out_file)
     run_command(qe_command)
 
 
