@@ -1,36 +1,27 @@
 
-# ---------- 1. Initialize simulation ---------------------
+# ---------- Initialize simulation ---------------------
 units metal
 atom_style atomic
 dimension  3
 boundary   p p p
 read_data /Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/EAM/lammps.data
-
-# ---------- 2. Specify interatomic potential ---------------------
 pair_style eam
-pair_coeff * * /usr/local/Cellar/lammps/2017-08-11_4/bin/pots/Pd_u3.eam
+pair_coeff * * /usr/local/Cellar/lammps/2017-08-11_4/bin/pots/Ag_u3.eam
+velocity  all create 900 87287 dist gaussian
 
-# -- include optimization of the unit cell parameter
-#fix 1 all box/relax iso 0.0 vmax 0.001
+# ---------- Describe computed properties------------------
+compute msdall all msd
+thermo_style custom step pe ke etotal temp press density c_msdall[4]
+thermo 100
 
-# -- fix all layers except for top two layers
-group bottom id 1:900
-group top id 901:1000
+# ---------- Specify ensemble  ---------------------
+fix  1 all nve
+#fix  1 all nvt temp 900 900 0.05
 
-fix 2 bottom setforce 0.0 0.0 0.0
-velocity bottom set 0.0 0.0 0.0
+# --------- Compute RDF ---------------
+compute rdfall all rdf 100 1 1
+fix 2 all ave/time 1 2500 2500 c_rdfall[*] file /Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/EAM/lammps.rdf mode vector
 
-# -- enable optimization of atomic positions (and the cell)
-min_style cg
-minimize 1e-10 1e-10 100000 10000000
-
-
-# ---- 4. Define and print useful variables -------------
-variable natoms equal "count(all)"
-variable totenergy equal "pe"
-variable length equal "lx"
-
-print "Total energy (eV) = ${totenergy}"
-print "Number of atoms = ${natoms}"
-print "Lattice constant (Angstoms) = ${length}"
-        
+# --------- Run -------------
+timestep 0.001
+run 10000
