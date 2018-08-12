@@ -295,13 +295,13 @@ class MD_Engine(MD_Config):
                 self.ml_model.correction_folder = '.'
 
         # ----------------------------------------------------------------------------------------
-        # check to see if training database of DFT forces exists, else: run DFT and bootstrap
+        # check to see if training database of DFT forces exists, then train and set threshold
         # -----------------------------------------------------------------------------------------
 
+        # @STEVEN: the second comparison was !=, but we'r checking if DFT forces don't exist -- changed that to '=='
         if self.mode == "ML" and self.ml_model.training_data['forces'] != []:
 
-            self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True)
-            self.ml_model.retrain(structure=self.structure)
+            self.ml_model.train()
             self.ml_model.set_error_threshold()
 
     def run(self, first_euler=True):
@@ -311,21 +311,20 @@ class MD_Engine(MD_Config):
         self.setup_run()
 
         # --------------------------------------------------------
-        #   first step
+        #   step 1
         # --------------------------------------------------------
 
         if self.ml_model.training_data['forces'] != [] or self['mode'] != 'ML':
             self.set_forces()
 
+        # ML mode and no database supplied -- bootstrap and set forces for 1st step from DFT
         else:
             results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
-            print(results)
+
             for n, at in enumerate(self.structure):
                 at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
 
             self.ml_model.retrain(structure=self.structure)
-
-        if self.frame == 0:
             self.ml_model.set_error_threshold()
 
         self.structure.record_trajectory(self.frame, self.time, position=True, force=True)
@@ -334,7 +333,7 @@ class MD_Engine(MD_Config):
             self.take_timestep(method='TO_Euler')
 
         # --------------------------------------------------------
-        #   iterate through frames
+        #   step 2 until end
         # --------------------------------------------------------
 
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):

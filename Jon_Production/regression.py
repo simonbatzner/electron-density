@@ -111,10 +111,9 @@ class RegressionModel:
 
             self.aug_and_norm(pos=positions, forces=forces, structure=structure)
 
-        self.set_error_threshold()
 
     def set_error_threshold(self):
-        """Set threshold for predictive variance"""
+        """Set threshold for predictive variance to be compared against"""
 
         # TODO: this should be set in first MD frame, then only compared against
         if self.err_thresh is None:
