@@ -43,7 +43,6 @@ class MD_Engine(MD_Config):
 
         # init regression model
         # TODO make sure params for both sklearn and self-made are all there and not redudant
-        # TODO: just pass ml_config object and init in RegressionModel()
         self.ml_model = GaussianProcess(training_dir=ml_config['training_dir'],
                                         length_scale=ml_config['gp_params']['length_scale'],
                                         length_scale_min=ml_config['gp_params']['length_scale_min'],
@@ -57,7 +56,6 @@ class MD_Engine(MD_Config):
                                         sklearn=ml_config['sklearn'])
 
         # init training database for regression model
-        # TODO: edit this!
         if ml_config['training_dir'] != 'None':
             self.ml_model.init_database(structure=self.structure)
 
@@ -130,10 +128,10 @@ class MD_Engine(MD_Config):
         elif self.mode == 'ML':
 
             if self.ml_model.target == 'e':
-                self.ml_model.predict(structure=self.structure, target='e')
+                self.ml_model.predict(structure=self.structure, target='e', frame=self.frame)
 
             elif self.ml_model.target == 'f':
-                forces = self.ml_model.predict(structure=self.structure, target='f')
+                forces = self.ml_model.predict(structure=self.structure, target='f', frame=self.frame)
 
                 for n, at in enumerate(self.structure):
                     at.force = list(np.array(forces[n]) * 13.6 / 0.529177)
@@ -205,10 +203,10 @@ class MD_Engine(MD_Config):
         """
         tick = ti.time()
         if self['verbosity'] >= 3:
-            # TODO: add time_elapsed argument
+            # TODO @Steven: add time_elapsed argument
             print(self.get_report(forces=True))
 
-        # TODO: Make sure that this works when dt is negative,
+        # TODO @Steven: Make sure that this works when dt is negative,
         # rewind function will do this nicely
         dt = dt or self.dt
         dtdt = dt * dt
@@ -227,7 +225,7 @@ class MD_Engine(MD_Config):
 
         # superior Verlet integration, see: https://en.wikipedia.org/wiki/Verlet_integration
 
-        # TODO: vectorize this?
+        # TODO @Steven: vectorize this?
 
         elif method == 'Verlet':
             for atom in self.structure:
@@ -254,8 +252,8 @@ class MD_Engine(MD_Config):
 
         self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, elapsed=tock - tick)
 
-    # TODO Determine all of the necessary ingredients which may or may not be missing
-    # TODO Info redundant or common to both should be checked here as well
+    # TODO @Steven Determine all of the necessary ingredients which may or may not be missing
+    # TODO @Steven Info redundant or common to both should be checked here as well
     def setup_run(self):
 
         """
@@ -276,8 +274,7 @@ class MD_Engine(MD_Config):
 
             if self.qe_config.get('correction_folder', False):
                 qe_corr = True
-            # @batzman the below line of code is why I want the default to be None
-            # b.c. if it's '.' it will evaluate to True
+
             if self.ml_model.correction_folder:
                 ml_corr = True
 
@@ -293,10 +290,9 @@ class MD_Engine(MD_Config):
             if qe_corr and not ml_corr:
                 self.ml_model.correction_folder = self.qe_config['correction_folder']
 
-            # @batzman this is how I make the default be '.', so that there is no risk of an issue
             if not qe_corr and not ml_corr:
                 self.qe_config['correction_folder'] = '.'
-                self.ml_model.correction_folder     = '.'
+                self.ml_model.correction_folder = '.'
 
         # ----------------------------------------------------------------------------------------
         # check to see if training database of DFT forces exists, else: run DFT and bootstrap
@@ -353,7 +349,7 @@ class MD_Engine(MD_Config):
                     self.frame_cnt += 1
 
                     if self.verbosity >= 2:
-                        print("Timestep with unacceptable uncertainty detected! \n "
+                        print("Timestep with unacceptable uncertainty detected! \n"
                               "Calling espresso to re-train the model.")
 
                     results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
@@ -368,7 +364,7 @@ class MD_Engine(MD_Config):
 
         self.conclude_run()
 
-    # TODO: Implement end-run report
+    # TODO @Steven: Implement end-run report
     def conclude_run(self):
         print("===============================================================\n")
 

@@ -66,11 +66,6 @@ class RegressionModel:
 
     def __init__(self, model, training_dir, model_type, target, force_conv=25.71104309541616, thresh_perc=.2,
                  eta_lower=0, eta_upper=2, eta_length=10, cutoff=8, verbosity=1, correction_folder=None):
-        # TODO @ SIMON: you previously had a default value for the correction folder;
-        # This interferes with the ability of the parser to detect when there is a mismatch between
-        # the correction folder of ESPRESSO and the ML config.
-        # We can have it set the default to be '.' if neither of them have one set
-        # THEN set it to '.'. CTRL+F "batzman" in the other doc to see how I address this
         """Initialization"""
 
         self.model = model
@@ -220,13 +215,11 @@ class GaussianProcess(RegressionModel):
         self.verbosity = verbosity
 
         # predictions
-        # TODO: see if these should be replaced by a list - check dependencies
-        self.pred = None
         self.mean_pred_var = None
         self.pred_vars = []
 
         # store uncertainties of model as {frame: var} dict
-        self.var_dict = None
+        self.var_dict = {}
 
         if self.sklearn:
             # sklearn implementation of a Gaussian Process
@@ -295,7 +288,7 @@ class GaussianProcess(RegressionModel):
             # get alpha and likelihood
             self.alpha = GP_SE_alpha(self.K, self.L, self.training_data['symm_norm'])
 
-    def predict(self, structure, target='f'):
+    def predict(self, structure, target='f', frame=-1):
         """
         Predict with specified target, predictions are stored as model attributes and returned
 
@@ -358,11 +351,11 @@ class GaussianProcess(RegressionModel):
             # compute average predictive variance against which treshol uncertainty will be compared
             self.mean_pred_var = np.mean(self.pred_vars)
 
+            self.var_dict.update({frame: self.mean_pred_var})
+
             return self.forces_curr
 
-            # # TODO: update dict
-            # self.var_dict.update
-            # {frame: self.}
+
 
         elif target == 'e':
             raise ValueError("Not implemented yet. Stay tuned.")
