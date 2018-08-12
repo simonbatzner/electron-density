@@ -340,7 +340,7 @@ class MD_Engine(MD_Config):
 
             if self.mode == 'ML':
 
-                if self.ml_model.is_var_inbound(verbosity=self.verbosity):
+                if self.ml_model.is_std_inbound(verbosity=self.verbosity):
                     pass
 
                 # if not, compute DFT, retrain model, move on

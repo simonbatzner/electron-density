@@ -113,9 +113,8 @@ class RegressionModel:
 
 
     def set_error_threshold(self):
-        """Set threshold for predictive variance to be compared against"""
+        """Set threshold for predictive std to be compared against"""
 
-        # TODO: this should be set in first MD frame, then only compared against
         if self.err_thresh is None:
             self.err_thresh = self.thresh_perc * np.mean(
                 np.abs(np.array(self.training_data['forces']) * self.force_conv))
@@ -136,7 +135,6 @@ class RegressionModel:
         """For a given supercell, calculate symmetry vectors for each atom"""
 
         for n in range(len(pos)):
-            # TODO: make this a method in RegressionModel()
             # get symmetry vectors
             symm_x, symm_y, symm_z = symmetrize_forces(pos, n, self.cutoff, self.eta_lower, self.eta_upper,
                                                        self.eta_length, brav_mat=structure.lattice,
@@ -214,11 +212,10 @@ class GaussianProcess(RegressionModel):
         self.verbosity = verbosity
 
         # predictions
-        self.mean_pred_var = None
-        self.pred_vars = []
+        self.mean_pred_std = None
 
-        # store uncertainties of model as {frame: var} dict
-        self.var_dict = {}
+        # store uncertainties of model as {frame: std} dict
+        self.std_dict = {}
 
         if self.sklearn:
             # sklearn implementation of a Gaussian Process
@@ -298,7 +295,7 @@ class GaussianProcess(RegressionModel):
 
             self.forces_curr = []
             self.tot_force = []
-            self.pred_vars = []
+            self.pred_stds = []
 
             # symmetrize atomic environment
             for cnt in range(len(structure.get_positions())):
@@ -327,7 +324,7 @@ class GaussianProcess(RegressionModel):
                     if self.sklearn:
 
                         force_pred, std_pred = gp_pred(symm=symm_norm, norm_fac=norm_fac, gp=self.model)
-                        self.pred_vars.append((std_pred * self.force_conv) ** 2)
+                        self.pred_stds.append(std_pred * self.force_conv)
 
                     else:
 
@@ -336,21 +333,22 @@ class GaussianProcess(RegressionModel):
                                                           K=self.K, L=self.L, alpha=self.alpha, sig=self.sigma,
                                                           ls=self.length_scale, xt=symm_norm)
 
+                        # TODO: check var vs. std here
                         pred_var = pred_var * norm_fac
+                        pred_std = np.sqrt(pred_var)
                         force_pred = force_pred * norm_fac
 
                         # TODO: check with Steven about unit conversion
-                        self.pred_vars.append(pred_var * self.force_conv ** 2)
+                        self.pred_stds.append(pred_std * self.force_conv)
 
-                    # TODO: check this
                     # store forces and error
                     self.forces_curr[cnt].append(force_pred)
                     self.tot_force.append(np.abs(force_pred * self.force_conv))
 
-            # compute average predictive variance against which treshol uncertainty will be compared
-            self.mean_pred_var = np.mean(self.pred_vars)
+            # compute average predictive standard deviation against which treshol uncertainty will be compared
+            self.mean_pred_std = np.mean(self.pred_stds)
 
-            self.var_dict.update({frame: self.mean_pred_var})
+            self.std_dict.update({frame: self.mean_pred_std})
 
             return self.forces_curr
 
@@ -362,18 +360,18 @@ class GaussianProcess(RegressionModel):
         else:
             raise ValueError("No proper ML target defined.")
 
-    def is_var_inbound(self,verbosity=0):
-        """Returns boolean of whether the model's predictive variance lies within the error threshold"""
+    def is_std_inbound(self,verbosity=0):
+        """Returns boolean of whether the model's predictive standard deviation lies within the error threshold"""
 
-        # TODO: Jon compared against stddev, not var - need to choose one
 
-        if verbosity>=4: print(self.err_thresh,'>?',np.sqrt(self.mean_pred_var))
+        if verbosity >= 4:
+            print(self.err_thresh, '> ?', self.mean_pred_std)
 
-        return self.err_thresh > np.sqrt(self.mean_pred_var)
+        return self.err_thresh > self.mean_pred_std
 
     def get_uncertainty(self):
-        """Return dict of models predictive variances as d = {frame: var}"""
-        return self.var_dict
+        """Return dict of models predictive standard deivatios as d = {frame: std}"""
+        return self.std_dict
 
 
 class KernelRidgeRegression(RegressionModel):
