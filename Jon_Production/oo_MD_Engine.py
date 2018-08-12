@@ -227,7 +227,7 @@ class MD_Engine(MD_Config):
 
         # superior Verlet integration, see: https://en.wikipedia.org/wiki/Verlet_integration
 
-        # Todo vectorize this
+        # TODO: vectorize this?
 
         elif method == 'Verlet':
             for atom in self.structure:
@@ -276,6 +276,8 @@ class MD_Engine(MD_Config):
 
             if self.qe_config.get('correction_folder', False):
                 qe_corr = True
+            # @batzman the below line of code is why I want the default to be None
+            # b.c. if it's '.' it will evaluate to True
             if self.ml_model.correction_folder:
                 ml_corr = True
 
@@ -291,6 +293,11 @@ class MD_Engine(MD_Config):
             if qe_corr and not ml_corr:
                 self.ml_model.correction_folder = self.qe_config['correction_folder']
 
+            # @batzman this is how I make the default be '.', so that there is no risk of an issue
+            if not qe_corr and not ml_corr:
+                self.qe_config['correction_folder'] = '.'
+                self.ml_model.correction_folder     = '.'
+
         # ----------------------------------------------------------------------------------------
         # check to see if training database of DFT forces exists, else: run DFT and bootstrap
         # -----------------------------------------------------------------------------------------
@@ -305,6 +312,7 @@ class MD_Engine(MD_Config):
         """
         Compute forces, move timestep
         """
+        self.setup_run()
 
         # --------------------------------------------------------
         #   first step
@@ -315,7 +323,7 @@ class MD_Engine(MD_Config):
 
         else:
             results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
-
+            print(results)
             for n, at in enumerate(self.structure):
                 at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
 
@@ -337,14 +345,14 @@ class MD_Engine(MD_Config):
 
             if self.mode == 'ML':
 
-                if self.ml_model.is_var_inbound():
-                    pass
+                if self.ml_model.is_var_inbound(verbosity=self.verbosity):
+                    continue
 
                 # if not, compute DFT, retrain model, move on
                 else:
                     self.frame_cnt += 1
 
-                    if self.verbosity == 2:
+                    if self.verbosity >= 2:
                         print("Timestep with unacceptable uncertainty detected! \n "
                               "Calling espresso to re-train the model.")
 
