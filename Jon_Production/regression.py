@@ -226,11 +226,10 @@ class GaussianProcess(RegressionModel):
         self.pred_vars = []
 
         # store uncertainties of model as {frame: var} dict
-        self.var_dict = None
+        self.var_dict = {}
 
         if self.sklearn:
             # sklearn implementation of a Gaussian Process
-            print("SKLEARN ONLINE")
             self.length_scale_min = float(length_scale_min)
             self.length_scale_max = float(length_scale_max)
             self.n_restarts = n_restarts
@@ -295,7 +294,7 @@ class GaussianProcess(RegressionModel):
             # get alpha and likelihood
             self.alpha = GP_SE_alpha(self.K, self.L, self.training_data['symm_norm'])
 
-    def predict(self, structure, target='f'):
+    def predict(self, structure, target='f',frame=0):
         """
         Predict with specified target, predictions are stored as model attributes and returned
 
@@ -358,11 +357,9 @@ class GaussianProcess(RegressionModel):
             # compute average predictive variance against which treshol uncertainty will be compared
             self.mean_pred_var = np.mean(self.pred_vars)
 
-            return self.forces_curr
+            self.var_dict[frame]=self.pred_vars
 
-            # # TODO: update dict
-            # self.var_dict.update
-            # {frame: self.}
+            return self.forces_curr
 
         elif target == 'e':
             raise ValueError("Not implemented yet. Stay tuned.")
@@ -374,7 +371,7 @@ class GaussianProcess(RegressionModel):
         """Returns boolean of whether the model's predictive variance lies within the error threshold"""
 
         # TODO: Jon compared against stddev, not var - need to choose one
-
+        # TODO: @SIMON Should probably make it an option in the config file which way it goes -ST
         if verbosity>=4: print(self.err_thresh,'>?',np.sqrt(self.mean_pred_var))
 
         return self.err_thresh > np.sqrt(self.mean_pred_var)

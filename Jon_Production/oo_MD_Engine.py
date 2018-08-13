@@ -14,6 +14,8 @@ from Jon_Production.parse import load_config_yaml, QE_Config, Structure_Config, 
 from utility import first_derivative_2nd, first_derivative_4th
 from Jon_Production.regression import GaussianProcess
 
+from Jon_Production.vis import uncertainty_plot
+
 mass_dict = {'H': 1.0, "Al": 26.981539, "Si": 28.0855, 'O': 15.9994}
 
 
@@ -58,7 +60,7 @@ class MD_Engine(MD_Config):
 
         # init training database for regression model
         # TODO: edit this!
-        if ml_config['training_dir'] != 'None':
+        if ml_config['training_dir'] != 'None' and self['mode']=="ML":
             self.ml_model.init_database(structure=self.structure)
 
         # contains info on each frame according to wallclock time and configuration
@@ -130,10 +132,10 @@ class MD_Engine(MD_Config):
         elif self.mode == 'ML':
 
             if self.ml_model.target == 'e':
-                self.ml_model.predict(structure=self.structure, target='e')
+                self.ml_model.predict(structure=self.structure, target='e',frame=self.frame)
 
             elif self.ml_model.target == 'f':
-                forces = self.ml_model.predict(structure=self.structure, target='f')
+                forces = self.ml_model.predict(structure=self.structure, target='f',frame=self.frame)
 
                 for n, at in enumerate(self.structure):
                     at.force = list(np.array(forces[n]) * 13.6 / 0.529177)
@@ -205,8 +207,7 @@ class MD_Engine(MD_Config):
         """
         tick = ti.time()
         if self['verbosity'] >= 3:
-            # TODO: add time_elapsed argument
-            print(self.get_report(forces=True))
+            print(self.get_report(forces=True,time_elapsed=self.structure.trajectory[self.frame]['elapsed']))
 
         # TODO: Make sure that this works when dt is negative,
         # rewind function will do this nicely
@@ -252,7 +253,8 @@ class MD_Engine(MD_Config):
 
         tock = ti.time()
 
-        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, elapsed=tock - tick)
+        self.structure.record_trajectory(frame=self.frame, time=self.dt, position=True, elapsed=tock - tick,
+                            uncertainty=self.ml_model.get_uncertainty()[self.frame] if self['mode'] == 'ML' else None)
 
     # TODO Determine all of the necessary ingredients which may or may not be missing
     # TODO Info redundant or common to both should be checked here as well
@@ -304,7 +306,7 @@ class MD_Engine(MD_Config):
 
         if self.mode == "ML" and self.ml_model.training_data['forces'] != []:
 
-            self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True)
+            self.qe_config.run_espresso(self.structure, cnt=0, augment_db=True,frame=self.frame)
             self.ml_model.retrain(structure=self.structure)
             self.ml_model.set_error_threshold()
 
@@ -312,42 +314,47 @@ class MD_Engine(MD_Config):
         """
         Compute forces, move timestep
         """
+        tick = ti.time()
         self.setup_run()
 
         # --------------------------------------------------------
-        #   first step
+        #   pre-first timestep : set forces
         # --------------------------------------------------------
 
+        # Determine whether to call ESPRESSO for first step or not
+        #@SIMON TODO catch if an augmentation database exists and use that for training
         if self.ml_model.training_data['forces'] != [] or self['mode'] != 'ML':
             self.set_forces()
-
         else:
-            results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
-            print(results)
+            results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True,frame=self.frame)
             for n, at in enumerate(self.structure):
                 at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
 
             self.ml_model.retrain(structure=self.structure)
+            # Get forces to record uncertainties
+            self.ml_model.predict(self.structure,frame=self.frame)
 
-        if self.frame == 0:
+
+        # Set error threshold if ML run
+        if self.frame == 0 and self['mode'] == 'ML':
             self.ml_model.set_error_threshold()
 
-        self.structure.record_trajectory(self.frame, self.time, position=True, force=True)
+        self.structure.record_trajectory(self.frame, self.time, elapsed=ti.time()-tick,
+                            uncertainty=self.ml_model.get_uncertainty()[self.frame] if self['mode']=='ML' else None)
 
         if self['time'] == 0 and first_euler:
             self.take_timestep(method='TO_Euler')
 
         # --------------------------------------------------------
-        #   iterate through frames
+        #   Main loop: iterate through frames
         # --------------------------------------------------------
 
+        # Allow for time-termination or frame-termination of run
         while self.time < self.get('tf', np.inf) and self['frame'] < self.get('frames', np.inf):
 
             if self.mode == 'ML':
-
                 if self.ml_model.is_var_inbound(verbosity=self.verbosity):
-                    continue
-
+                    pass
                 # if not, compute DFT, retrain model, move on
                 else:
                     self.frame_cnt += 1
@@ -356,12 +363,15 @@ class MD_Engine(MD_Config):
                         print("Timestep with unacceptable uncertainty detected! \n "
                               "Calling espresso to re-train the model.")
 
-                    results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True)
+                    results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True,
+                                                          frame=self.frame)
 
                     self.ml_model.retrain(structure=self.structure)
+                    self.ml_model.predict(structure=self.structure,frame=self.frame)
 
                     for n, at in enumerate(self.structure):
                         at.force = list(np.array(results['forces'][n]) * 13.6 / 0.529177)
+                    #todo make uncertainty 0 here?
 
             self.take_timestep(method=self['timestep_method'])
 
@@ -369,19 +379,26 @@ class MD_Engine(MD_Config):
         self.conclude_run()
 
     # TODO: Implement end-run report
+    # TODO Hi-Priority
     def conclude_run(self):
-        print("===============================================================\n")
+
+        #  @VIS include a visualization hook here TODO
+        #if self.ml_model.get('plot_uncertainty',False):
+        #    pass
+
+
+        print("="*100)
+        print('='*100)
 
         if self.ml_model.target == 'f':
             print("Run concluded. Final positions:\n")
-            print(self.structure.get_positions())
+            print(self.get_report(forces=True))
 
         else:
             raise ValueError("Energy target not implemented yet. Stay tuned.")
 
-        print(self.get_report(forces=True))
 
-    def get_report(self, forces=True, velocities=False, time_elapsed=0):
+    def get_report(self, forces=True, velocities=False, variances=True, time_elapsed=0):
         """
         Prints out the current statistics of the atoms line by line.
 
@@ -389,18 +406,21 @@ class MD_Engine(MD_Config):
 
             :param forces:       (bool) Determines if forces will be printed.
             :param velocities:   (bool) Determines if velocities will be printed.
+            :param variances:   (bool) Determines if variances will be printed.
+
             :param time_elapsed: (float) Puts elapsed time for a frame into the report
         """
         report = '=' * 100
         report += '\nFrame: {} - System Time: {} - Elapsed Time: {}\n\n'.format(self['frame'], np.round(self['time'], 3),
                                                                          np.round(time_elapsed, 3))
         data = []
-        data.append(["Atom", "Element",  "Position", "Forces" if forces else "", "Velocities" if velocities else "", "\n"])
+        data.append(["Atom", "Element",  "Position", "Forces" if forces else "", "Velocities" if velocities else "", "Variances" if variances and self['mode']=='ML' else "", "\n"])
 
         for n, at in enumerate(self.structure):
             data.append([str(n), at.element, str(tuple([np.round(x, 4) for x in at.position])),
                         str(tuple([np.round(f, 4) for f in at.force])) if forces else "",
-                         str(tuple([np.round(v, 4) for v in at.velocity])) if velocities else "", "\n"])
+                         str(tuple([np.round(v, 4) for v in at.velocity])) if velocities else "",
+                         str(tuple([np.round(v, 4) for v in self.ml_model.get_uncertainty()[self.frame][3*n:3*(n+1)]])) if variances and self['mode']=='ML' else "", "\n"])
 
         col_width = max(len(word) for row in data for word in row) + 4
 
@@ -414,15 +434,22 @@ class MD_Engine(MD_Config):
         return report
 
 
+
 def main():
     config = load_config_yaml('H2_test.yaml')
     qe_config = QE_Config(config['qe_params'], warn=True)
     structure = Structure_Config(config['structure_params']).to_structure()
-    ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
     md_config = MD_Config(params=config['md_params'], warn=True)
+    if md_config['mode']=='ML':
+        ml_config_ = ml_config(params=config['ml_params'], print_warn=True)
+    else:
+        ml_config_ = ml_config(params={})
     engine = MD_Engine(structure, md_config, qe_config, ml_config_)
 
     engine.run()
+
+    if md_config['mode']=='ML':
+        uncertainty_plot(engine.structure,engine.ml_model.err_thresh,qe_config.ran_frames)
 
 
 if __name__ == '__main__':

@@ -284,14 +284,32 @@ class Structure(list):
         print(" \t [ {},{},{}]".format(lattice[1, 0], lattice[1, 1], lattice[1, 2]))
         print(" \t [ {},{},{}]]".format(lattice[2, 0], lattice[2, 1], lattice[2, 2]))
 
-    def record_trajectory(self, frame, time=None, position=False,
-                          velocity=False, force=False, energy=None,
-                          elapsed=None):
+    #TODO Make this accept a dictionary of arguments which then set all of the
+    # options so that one set of parameters can be defined in the input file
+    # and used for all runs
+    def record_trajectory(self, frame, time=None,
+                          position=True, velocity=False, force=True,
+                          energy=None, uncertainty=None, elapsed=None):
+        """
+        Writes the current state of the system to the structure's
+        trajectory dictionary.
 
-        if not self.trajectory.get(frame, False):
-            self.trajectory[frame] = {}
+        args:
+        :param frame: (int) Index of frame
+        :param time: (float) Current simulation time
+        :param position: (bool) Store position or not
+        :param velocity: (bool) Store velocity or not
+        :param force: (bool) Store force or not
+        :param energy: (float) Energy of system configuration
+        :param uncertainty: (array) Uncertainty associated with each force
+        :param elapsed: (float) Time elapsed since previous step
+        :return:
+        """
 
-        if time is not None:
+        # Instantiate the dictionary at that frame
+        self.trajectory[frame] = {}
+
+        if time:
             self.trajectory[frame]['t'] = time
         if position:
             positions = [at.position for at in self.atoms]
@@ -302,9 +320,11 @@ class Structure(list):
         if force:
             forces = [at.force for at in self.atoms]
             self.trajectory[frame]['forces'] = np.array(forces)
-        if energy is not None:
+        if energy:
             self.trajectory[frame]['energy'] = energy
-        if elapsed is not None:
+        if uncertainty:
+            self.trajectory[frame]['uncertainty'] = uncertainty
+        if elapsed:
             self.trajectory[frame]['elapsed'] = elapsed
 
     def get_species_mass(self, element):
@@ -684,6 +704,8 @@ class QE_Config(dict):
         else:
             self.store_always = False
 
+        self.ran_frames=[]
+
     def validate_against_structure(self, structure):
         """
         Tests to make sure that ESPRESSO will be able to run
@@ -706,7 +728,7 @@ class QE_Config(dict):
         d["@class"] = self.__class__.__name__
         return d
 
-    def run_espresso(self, structure, cnt=-1, augment_db=False):
+    def run_espresso(self, structure, cnt=-1, augment_db=False,frame=None):
         """
         Sets up the directory where pwscf is to be run; then, calls pw.x.
         Changes depending on if an augmentation run is being called i.e. one which is
@@ -714,6 +736,7 @@ class QE_Config(dict):
 
         :param structure:       structure object.
         :param augment_db:      boolean, True if run will be a part of updated ML database
+        :param frame            int, Stores the frame that the espresso run was called on
         :return:
         """
 
@@ -727,7 +750,8 @@ class QE_Config(dict):
 
         else:
             dirname = 'temprun'
-
+        if isinstance(frame,int):
+            self.ran_frames.append(frame)
         runpath = os.path.join(self.get('outdir', '.'), dirname)
         prepare_dir(runpath)
         self.write_pwscf_input(structure, runpath)
