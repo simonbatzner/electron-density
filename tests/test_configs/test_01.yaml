@@ -1,0 +1,8 @@
+structure_params:
+  alat: 1.0
+  pos:
+    - ['H', [0,0,0]]
+  lattice:
+    - [1,0,0]
+    - [0,1,0]
+    - [0,0,1]
