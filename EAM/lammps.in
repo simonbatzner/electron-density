@@ -6,13 +6,16 @@ dimension  3
 boundary   p p p
 read_data /Users/simonbatzner1/Desktop/Research/Research_Code/ML-electron-density/EAM/lammps.data
 pair_style eam
-pair_coeff * * /usr/local/Cellar/lammps/2017-08-11_4/bin/pots/Ag_u3.eam
+pair_coeff * * /usr/local/Cellar/lammps/2017-08-11_4/bin/pots/Pd_u3.eam
 velocity  all create 900 87287 dist gaussian
 
+# ---------- set adatom ---------------------
+group adatom id 64001
+
 # ---------- Describe computed properties------------------
-compute msdall all msd
-thermo_style custom step pe ke etotal temp press density c_msdall[4]
-thermo 100
+compute msd_ad adatom msd
+thermo_style custom step pe ke etotal temp press density c_msd_ad[4]
+thermo 1
 
 # ---------- Specify ensemble  ---------------------
 #fix  1 all nve
