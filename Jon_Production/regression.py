@@ -219,7 +219,6 @@ class GaussianProcess(RegressionModel):
 
         if self.sklearn:
             # sklearn implementation of a Gaussian Process
-            print("SKLEARN ONLINE")
             self.length_scale_min = float(length_scale_min)
             self.length_scale_max = float(length_scale_max)
             self.n_restarts = n_restarts
@@ -350,8 +349,7 @@ class GaussianProcess(RegressionModel):
 
             self.std_dict.update({frame: self.mean_pred_std})
 
-            return self.forces_curr
-
+            self.var_dict[frame]=self.pred_vars
 
 
         elif target == 'e':
@@ -363,9 +361,9 @@ class GaussianProcess(RegressionModel):
     def is_std_inbound(self,verbosity=0):
         """Returns boolean of whether the model's predictive standard deviation lies within the error threshold"""
 
-
         if verbosity >= 4:
             print(self.err_thresh, '> ?', self.mean_pred_std)
+
 
         return self.err_thresh > self.mean_pred_std
 
