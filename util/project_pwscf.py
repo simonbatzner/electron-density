@@ -137,6 +137,7 @@ def parse_qe_pwscf_output(outfile):
                 total_force = float(line.split()[3]) * (13.605698066 / 0.529177249)
 
             if line.lower().startswith('!    total energy'):
+                print(1)
                 total_energy = float(line.split()[-2]) * 13.605698066
 
             if line.lower().startswith('          total   stress'):
