@@ -349,7 +349,7 @@ class GaussianProcess(RegressionModel):
 
             self.std_dict.update({frame: self.mean_pred_std})
 
-            self.var_dict[frame]=self.pred_vars
+            return self.forces_curr
 
 
         elif target == 'e':

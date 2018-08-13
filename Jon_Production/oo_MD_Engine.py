@@ -321,10 +321,10 @@ class MD_Engine(MD_Config):
 
         # Determine whether to call ESPRESSO for first step or not
         #@SIMON TODO catch if an augmentation database exists and use that for training
-        if self.ml_model.training_data['forces'] != [] or self['mode'] != 'ML':
+        if  self['mode'] == 'ML' and self.ml_model.training_data['forces'] != [] :
             self.set_forces()
         # ML mode and no database supplied -- bootstrap and set forces for 1st step from DFT
-        else:
+        elif self['mode']=='ML':
             results = self.qe_config.run_espresso(structure=self.structure, cnt=self.frame_cnt, augment_db=True,frame=self.frame)
 
             for n, at in enumerate(self.structure):
@@ -417,7 +417,7 @@ class MD_Engine(MD_Config):
             data.append([str(n), at.element, str(tuple([np.round(x, 4) for x in at.position])),
                         str(tuple([np.round(f, 4) for f in at.force])) if forces else "",
                          str(tuple([np.round(v, 4) for v in at.velocity])) if velocities else "",
-                         str(tuple([np.round(v, 4) for v in self.ml_model.get_uncertainty()[self.frame][3*n:3*(n+1)]])) if variances and self['mode']=='ML' else "", "\n"])
+                         str(tuple([np.round(self.ml_model.get_uncertainty()[self.frame], 4) ])) if variances and self['mode']=='ML' else "", "\n"])
 
         col_width = max(len(word) for row in data for word in row) + 4
 
@@ -433,7 +433,7 @@ class MD_Engine(MD_Config):
 
 
 def main():
-    config = load_config_yaml('H2_test.yaml')
+    config = load_config_yaml('Si_AIMD.yaml')
     qe_config = QE_Config(config['qe_params'], warn=True)
     structure = Structure_Config(config['structure_params']).to_structure()
     md_config = MD_Config(params=config['md_params'], warn=True)
