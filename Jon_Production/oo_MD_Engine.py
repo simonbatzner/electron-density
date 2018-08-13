@@ -433,7 +433,7 @@ class MD_Engine(MD_Config):
 
 
 def main():
-    config = load_config_yaml('Si_AIMD.yaml')
+    config = load_config_yaml('H2_GP.yaml')
     qe_config = QE_Config(config['qe_params'], warn=True)
     structure = Structure_Config(config['structure_params']).to_structure()
     md_config = MD_Config(params=config['md_params'], warn=True)

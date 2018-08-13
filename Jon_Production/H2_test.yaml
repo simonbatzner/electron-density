@@ -26,7 +26,7 @@ md_params:
   mode: ML
 
   ti: 0.0
-  frames: 2
+  frames: 50
   mass: 1.0   # set as an array if multiple atomic species, or 0 for automatic setting by element
   verbosity : 3
   fd_dx: .1
