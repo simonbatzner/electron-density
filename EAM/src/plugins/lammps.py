@@ -48,7 +48,7 @@ def write_lammps_input(datafile, runpath, rdffile, intemplate, inparam, potentia
     return infile
 
 
-def lammps_run(struc, runpath, intemplate, potential, inparam):
+def lammps_run(struc, runpath, intemplate, potential, inparam, remote=False):
     lammps_code = ExternalCode(path=os.environ['LAMMPS_COMMAND'])
     prepare_dir(runpath.path)
     logfile = File(path=os.path.join(runpath.path, 'lammps.log'))
@@ -59,8 +59,14 @@ def lammps_run(struc, runpath, intemplate, potential, inparam):
     infile = write_lammps_input(datafile=datafile, potential=potential, runpath=runpath, rdffile=rdffile,
                                 intemplate=intemplate, inparam=inparam)
 
-    lammps_command = "{} -in {} -log {} > {}".format(lammps_code.path, infile.path,
-                                                     logfile.path, outfile.path)
+    if remote:
+        run_command("module purge")
+        run_command("module load openmpi-2.0.0")
+        lammps_command = "mpirun -np 16 {} -in {} -log {} > {}".format(lammps_code.path, infile.path,
+                                                         logfile.path, outfile.path)
+    else:
+        lammps_command = "{} -in {} -log {} > {}".format(lammps_code.path, infile.path,
+                                                         logfile.path, outfile.path)
 
     run_command(lammps_command)
     return outfile
