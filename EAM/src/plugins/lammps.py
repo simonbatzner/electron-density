@@ -60,11 +60,13 @@ def lammps_run(struc, runpath, intemplate, potential, inparam, remote=False):
                                 intemplate=intemplate, inparam=inparam)
 
     if remote:
+        print("1")
         print("Running lammps remote on lutz...")
         run_command("module purge")
         run_command("module load openmpi-2.0.2")
         lammps_command = "mpirun -np 32 {} -in {} -log {} > {}".format(lammps_code.path, infile.path,
                                                          logfile.path, outfile.path)
+        print(lammps_command)
     else:
         lammps_command = "{} -in {} -log {} > {}".format(lammps_code.path, infile.path,
                                                          logfile.path, outfile.path)
