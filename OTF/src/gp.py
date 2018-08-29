@@ -31,7 +31,7 @@ def get_outfiles(root_dir, out=True):
     """
     matching = []
 
-    for root, dirnames, filenames in os.walk(root_dir):
+    for root, _, filenames in os.walk(root_dir):
         for filename in filenames:
 
             if out:
@@ -76,24 +76,26 @@ class GaussianProcess:
         self.training_data = np.empty(0,)
         self.training_labels = np.empty(0,)
 
-    def init_db(self, root_dir):
+    def init_db(self, root_dir, brav_mat, brav_inv,
+                vec1, vec2, vec3, cutoff):
         """Initialize database from root directory containing training data"""
-        positions, species, cell, forces = [], [], [], []
+        pos, _, _, frcs = [], [], [], []
 
         for file in get_outfiles(root_dir=root_dir, out=False):
-            positions, species, cell = parse_qe_input(file)
+            pos = parse_qe_input(file)[0]
 
         for file in get_outfiles(root_dir=root_dir, out=True):
-            forces = parse_qe_forces(file)
+            frcs = parse_qe_forces(file)
 
-        self.training_data = np.asarray(get_envs(pos=positions, typs=['Si'],
+        self.training_data = np.asarray(get_envs(pos=pos,
+                                                 typs=['Si'],
                                                  brav_mat=brav_mat,
                                                  brav_inv=brav_inv,
                                                  vec1=vec1,
                                                  vec2=vec2,
                                                  vec3=vec3,
                                                  cutoff=cutoff))
-        self.training_labels = np.asarray(forces)
+        self.training_labels = np.asarray(frcs)
 
     def train(self):
         """
@@ -127,19 +129,21 @@ class GaussianProcess:
         self.length_scale = res.x[1]
         self.sigma_n = res.x[2]
 
-    def predict(self, xt, d):
+    def predict(self, x_t, d):
         """ Make GP prediction with SE kernel """
 
         # get kernel vector
-        kv = self.get_kernel_vector(x=xt, d_1=1)
+        k_v = self.get_kernel_vector(x=x_t, d_1=1)
 
         # get predictive mean
-        self.pred_mean = np.matmul(kv.transpose(), self.alpha)
+        self.pred_mean = np.matmul(k_v.transpose(), self.alpha)
 
         # get predictive variance
-        v = solve_triangular(self.l_mat, kv, lower=True)
-        self_kern = self.kernel(xt, xt, d, d, self.sigma_f, self.length_scale)
-        self.pred_var = self_kern - np.matmul(v.transpose(), v)
+        v_vec = solve_triangular(self.l_mat, k_v, lower=True)
+        self_kern = self.kernel(x_t, x_t, d, d,
+                                self.sigma_f,
+                                self.length_scale)
+        self.pred_var = self_kern - np.matmul(v_vec.transpose(), v_vec)
 
     def minus_like_hyp(self, hyp):
         """
@@ -182,9 +186,9 @@ class GaussianProcess:
         :return like    likelihood
         """
         like = -(1 / 2) * \
-               np.matmul(self.training_labels.transpose(), self.alpha) - \
-               np.sum(np.log(np.diagonal(self.l_mat))) - np.log(2 * np.pi) * \
-               self.k_mat.shape[1] / 2
+            np.matmul(self.training_labels.transpose(), self.alpha) - \
+            np.sum(np.log(np.diagonal(self.l_mat))) - np.log(2 * np.pi) * \
+            self.k_mat.shape[1] / 2
 
         return like
 
@@ -219,18 +223,18 @@ class GaussianProcess:
         """
         Compute kernel vector
         """
-        ds = ['xrel', 'yrel', 'zrel']
+        d_s = ['xrel', 'yrel', 'zrel']
         size = len(self.training_data) * 3
-        kv = np.zeros([size, 1])
+        k_v = np.zeros([size, 1])
 
         for m in range(size):
-            x2 = self.training_data[int(math.floor(m / 3))]
-            d_2 = ds[m % 3]
-            kv[m] = self.kernel(x, x2, d_1, d_2,
-                                self.sigma_f,
-                                self.length_scale)
+            x_2 = self.training_data[int(math.floor(m / 3))]
+            d_2 = d_s[m % 3]
+            k_v[m] = self.kernel(x, x_2, d_1, d_2,
+                                 self.sigma_f,
+                                 self.length_scale)
 
-        return kv
+        return k_v
 
     def set_alpha(self):
         """
@@ -244,31 +248,33 @@ class GaussianProcess:
 
 if __name__ == "__main__":
 
-    global alat, brav_inv, brav_mat, vec1, vec2, vec3, cutoff
-
     # set crystal structure
     dim = 3
-    alat = 4.344404578
-    unit_cell = [[0.0, alat / 2, alat / 2],
-                 [alat / 2, 0.0, alat / 2],
-                 [alat / 2, alat / 2, 0.0]]
+    alat_si = 4.344404578
+    unit_cell = [[0.0, alat_si / 2, alat_si / 2],
+                 [alat_si / 2, 0.0, alat_si / 2],
+                 [alat_si / 2, alat_si / 2, 0.0]]
     unit_pos = [['Si', [0, 0, 0]],
-                ['Si', [alat / 4, alat / 4, alat / 4]]]
-    brav_mat = np.array([[0.0, alat / 2, alat / 2],
-                         [alat / 2, 0.0, alat / 2],
-                         [alat / 2, alat / 2, 0.0]]) * dim
-    brav_inv = np.linalg.inv(brav_mat)
+                ['Si', [alat_si / 4, alat_si / 4, alat_si / 4]]]
+    brav_mat_si = np.array([[0.0, alat_si / 2, alat_si / 2],
+                           [alat_si / 2, 0.0, alat_si / 2],
+                           [alat_si / 2, alat_si / 2, 0.0]]) * dim
+    brav_inv_si = np.linalg.inv(brav_mat_si)
 
     # bravais vectors
-    vec1 = brav_mat[:, 0].reshape(3, 1)
-    vec2 = brav_mat[:, 1].reshape(3, 1)
-    vec3 = brav_mat[:, 2].reshape(3, 1)
-    cutoff = 4.5
+    vec1_si = brav_mat_si[:, 0].reshape(3, 1)
+    vec2_si = brav_mat_si[:, 1].reshape(3, 1)
+    vec3_si = brav_mat_si[:, 2].reshape(3, 1)
+    cutoff_si = 4.5
 
-    positions, species, cell = parse_qe_input('pwscf.in')
-    forces = parse_qe_forces('pwscf.out')
+    positions, species, cell = parse_qe_input('../pwscf.in')
+    forces = parse_qe_forces('../pwscf.out')
     structure = Structure(positions, species, cell)
 
     gp = GaussianProcess(kernel=two_body)
-    gp.init_db(root_dir='..')
+    gp.init_db(root_dir='..',
+               brav_mat=brav_mat_si,
+               brav_inv=brav_inv_si,
+               vec1=vec1_si, vec2=vec2_si, vec3=vec3_si,
+               cutoff=cutoff_si)
     gp.train()
