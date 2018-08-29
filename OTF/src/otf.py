@@ -15,7 +15,8 @@ import datetime
 class Structure(object):
     def __init__(self, positions, species, cell):
         """
-        Contains positions, species, cell, previous positions, forces, and stds of forces
+        Contains positions, species, cell, previous positions, forces, and
+        stds of forces
 
         :param positions: List[nparray],  List of np array positions
         :param species: List[str], List of element symbols
@@ -32,7 +33,8 @@ class Structure(object):
 
 class fake_kernel(object):
     """
-    Bullshit temporary kernel that returns random forces and variances. Hope we do better than this!
+    Fake kernel that returns random forces and variances. 
+    Hope we do better than this!
     """
 
     def train(self, structure):
@@ -82,7 +84,7 @@ class OTF(object):
 
     def run(self):
         """
-        Performs main loop of OTF engine
+        Performs main loop of OTF engine.
         :return:
         """
 
@@ -106,16 +108,17 @@ class OTF(object):
 
     def update_positions(self):
         """
-        Apply a timestep to the structure at self.structure based on current forces
+        Apply a timestep to the structure at self.structure based on current
+        forces.
         """
 
         # Maintain list of elemental masses in amu to calculate acceleration
 
         for i, prev_pos in enumerate(self.structure.prev_positions):
             temp_pos = self.structure.positions[i]
-            self.structure.positions[i] = 2 * self.structure.positions[i] - prev_pos \
-                                          + self.dt ** 2 * self.structure.forces[i] / mass_dict[
-                self.structure.species[i]]
+            self.structure.positions[i] = 2 * self.structure.positions[i] - \
+                prev_pos + self.dt ** 2 * self.structure.forces[i] / \
+                mass_dict[self.structure.species[i]]
             self.structure.prev_positions[i] = np.array(temp_pos)
 
     def run_espresso(self):
