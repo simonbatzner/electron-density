@@ -16,16 +16,17 @@ import numpy as np
 from scipy.linalg import solve_triangular
 from scipy.optimize import minimize
 
-from ..two_body import two_body
+from two_body import two_body
+from kern_help import get_envs
 from otf import parse_qe_input, parse_qe_forces, Structure
 
 
 def get_outfiles(root_dir, out=True):
     """
-    Find all files matching *.out OR *.in
+    Find all files matching *.out or *.in
 
     :param root_dir:    (str), dir to walk from
-    :param out:         (bool), whether to look for .out (true) or .in files (false)
+    :param out:         (bool), whether to look for .out or .in files
     :return: matching   (list), files in root_dir ending with .out
     """
     matching = []
@@ -42,91 +43,6 @@ def get_outfiles(root_dir, out=True):
                     matching.append(os.path.join(root, filename))
 
     return matching
-
-
-
-# given list of Cartesian coordinates, return list of atomic environments
-def get_cutoff_vecs(vec, brav_mat, brav_inv, vec1, vec2, vec3, cutoff):
-    # get bravais coefficients
-    coeff = np.matmul(brav_inv, vec)
-
-    # get bravais coefficients for atoms within one super-super-cell
-    coeffs = [[], [], []]
-    for n in range(3):
-        coeffs[n].append(coeff[n])
-        coeffs[n].append(coeff[n] - 1)
-        coeffs[n].append(coeff[n] + 1)
-        coeffs[n].append(coeff[n] - 2)
-        coeffs[n].append(coeff[n] + 2)
-
-    # get vectors within cutoff
-    vecs = []
-    dists = []
-    for m in range(len(coeffs[0])):
-        for n in range(len(coeffs[1])):
-            for p in range(len(coeffs[2])):
-                vec_curr = coeffs[0][m] * vec1 + coeffs[1][n] * vec2 + coeffs[2][p] * vec3
-
-                dist = np.linalg.norm(vec_curr)
-
-                if dist < cutoff:
-                    vecs.append(vec_curr)
-                    dists.append(dist)
-
-    return vecs, dists
-
-
-# given list of cartesian coordinates, get chemical environment of specified atom
-# pos = list of cartesian coordinates
-# typs = list of atom types
-def get_env_struc(pos, typs, atom, brav_mat, brav_inv, vec1, vec2, vec3, cutoff):
-    pos_atom = np.array(pos[atom]).reshape(3, 1)
-    typ = typs[atom]
-    env = {'central_atom': typ, 'dists': [], 'xs': [], 'ys': [], 'zs': [],
-           'xrel': [], 'yrel': [], 'zrel': [], 'types': []}
-
-    # loop through positions to find all atoms and images in the neighborhood
-    for n in range(len(pos)):
-        # position relative to reference atom
-        diff_curr = np.array(pos[n]).reshape(3, 1) - pos_atom
-
-        # get images within cutoff
-        vecs, dists = get_cutoff_vecs(diff_curr, brav_mat,
-                                      brav_inv, vec1, vec2, vec3, cutoff)
-
-        for vec, dist in zip(vecs, dists):
-            # ignore self interaction
-            if dist != 0:
-                # append distance
-                env['dists'].append(dist)
-
-                # append coordinate differences
-                env['xs'].append(vec[0][0])
-                env['ys'].append(vec[1][0])
-                env['zs'].append(vec[2][0])
-
-                # append relative coordinate differences
-                env['xrel'].append(vec[0][0] / dist)
-                env['yrel'].append(vec[1][0] / dist)
-                env['zrel'].append(vec[2][0] / dist)
-
-                # append atom type
-                env['types'].append(typs[n])
-
-    #env['trip_dict'] = get_trip_dict(env)
-
-    return env
-
-
-# given list of cartesian coordinates, return list of chemical environments
-def get_envs(pos, typs, brav_mat, brav_inv, vec1, vec2, vec3, cutoff):
-    envs = []
-    for n in range(len(pos)):
-        atom = n
-        env = get_env_struc(pos, typs, atom, brav_mat, brav_inv, vec1, vec2, vec3, cutoff)
-        envs.append(env)
-
-    return envs
 
 
 class GaussianProcess:
@@ -160,11 +76,9 @@ class GaussianProcess:
         self.training_data = np.empty(0,)
         self.training_labels = np.empty(0,)
 
-        # initiate database
-        self.init_db()
-
     def init_db(self, root_dir):
         """Initialize database from root directory containing training data"""
+        positions, species, cell, forces = [], [], [], []
 
         for file in get_outfiles(root_dir=root_dir, out=False):
             positions, species, cell = parse_qe_input(file)
@@ -172,8 +86,13 @@ class GaussianProcess:
         for file in get_outfiles(root_dir=root_dir, out=True):
             forces = parse_qe_forces(file)
 
-        self.training_data = np.asarray(get_envs(pos=positions, typs=['Si'], brav_mat=brav_mat, brav_inv=brav_inv,
-                                                 vec1=vec1, vec2=vec2, vec3=vec3, cutoff=cutoff))
+        self.training_data = np.asarray(get_envs(pos=positions, typs=['Si'],
+                                                 brav_mat=brav_mat,
+                                                 brav_inv=brav_inv,
+                                                 vec1=vec1,
+                                                 vec2=vec2,
+                                                 vec3=vec3,
+                                                 cutoff=cutoff))
         self.training_labels = np.asarray(forces)
 
     def train(self):
@@ -186,7 +105,9 @@ class GaussianProcess:
 
         # following: Algorithm 2.1 (pg. 19) of
         # "Gaussian Processes for Machine Learning" by Rasmussen and Williams
-        self.set_kernel(sigma_f=self.sigma_f, length_scale=self.length_scale, sigma_n=self.sigma_n)
+        self.set_kernel(sigma_f=self.sigma_f,
+                        length_scale=self.length_scale,
+                        sigma_n=self.sigma_n)
 
         # get alpha and likelihood
         self.set_alpha()
@@ -202,7 +123,9 @@ class GaussianProcess:
         res = minimize(self.minus_like_hyp, x_0, method='nelder-mead',
                        options={'xtol': 1e-8, 'disp': True})
 
-        self.sigma_f, self.length_scale, self.sigma_n = res.x[0], res.x[1], res.x[2]
+        self.sigma_f = res.x[0]
+        self.length_scale = res.x[1]
+        self.sigma_n = res.x[2]
 
     def predict(self, xt, d):
         """ Make GP prediction with SE kernel """
@@ -244,7 +167,9 @@ class GaussianProcess:
         sigma_n = hyp[2]
 
         # calculate likelihood
-        self.set_kernel(sigma_f=sigma_f, length_scale=length_scale, sigma_n=sigma_n)
+        self.set_kernel(sigma_f=sigma_f,
+                        length_scale=length_scale,
+                        sigma_n=sigma_n)
         self.set_alpha()
         like = self.get_likelihood()
 
@@ -256,8 +181,10 @@ class GaussianProcess:
 
         :return like    likelihood
         """
-        like = -(1 / 2) * np.matmul(self.training_labels.transpose(), self.alpha) - \
-               np.sum(np.log(np.diagonal(self.l_mat))) - np.log(2 * np.pi) * self.k_mat.shape[1] / 2
+        like = -(1 / 2) * \
+               np.matmul(self.training_labels.transpose(), self.alpha) - \
+               np.sum(np.log(np.diagonal(self.l_mat))) - np.log(2 * np.pi) * \
+               self.k_mat.shape[1] / 2
 
         return like
 
@@ -299,7 +226,9 @@ class GaussianProcess:
         for m in range(size):
             x2 = self.training_data[int(math.floor(m / 3))]
             d_2 = ds[m % 3]
-            kv[m] = self.kernel(x, x2, d_1, d_2, self.sigma_f, self.length_scale)
+            kv[m] = self.kernel(x, x2, d_1, d_2,
+                                self.sigma_f,
+                                self.length_scale)
 
         return kv
 
@@ -320,9 +249,14 @@ if __name__ == "__main__":
     # set crystal structure
     dim = 3
     alat = 4.344404578
-    unit_cell = [[0.0, alat / 2, alat / 2], [alat / 2, 0.0, alat / 2], [alat / 2, alat / 2, 0.0]]
-    unit_pos = [['Si', [0, 0, 0]], ['Si', [alat / 4, alat / 4, alat / 4]]]
-    brav_mat = np.array([[0.0, alat / 2, alat / 2], [alat / 2, 0.0, alat / 2], [alat / 2, alat / 2, 0.0]]) * dim
+    unit_cell = [[0.0, alat / 2, alat / 2],
+                 [alat / 2, 0.0, alat / 2],
+                 [alat / 2, alat / 2, 0.0]]
+    unit_pos = [['Si', [0, 0, 0]],
+                ['Si', [alat / 4, alat / 4, alat / 4]]]
+    brav_mat = np.array([[0.0, alat / 2, alat / 2],
+                         [alat / 2, 0.0, alat / 2],
+                         [alat / 2, alat / 2, 0.0]]) * dim
     brav_inv = np.linalg.inv(brav_mat)
 
     # bravais vectors
@@ -336,5 +270,5 @@ if __name__ == "__main__":
     structure = Structure(positions, species, cell)
 
     gp = GaussianProcess(kernel=two_body)
+    gp.init_db(root_dir='..')
     gp.train()
-    gp.predict(structure)
