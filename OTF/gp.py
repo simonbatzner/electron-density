@@ -13,6 +13,7 @@ import math
 import numpy as np
 from scipy.linalg import solve_triangular
 from scipy.optimize import minimize
+from two_body import two_body
 
 
 class GaussianProcess:
@@ -181,3 +182,7 @@ class GaussianProcess:
         alpha = solve_triangular(self.l_mat.transpose(), ts1)
 
         self.alpha = alpha
+
+
+if __name__ == "__main__":
+    gp = GaussianProcess(kernel=two_body())

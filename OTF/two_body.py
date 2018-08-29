@@ -1,8 +1,18 @@
-# get two body kernel between chemical environments
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""" Compute Two-body kernel between chemical environments
+    (for test purposes only)
+
+Jon V
+"""
+
+import numpy as np
+
 def two_body(x1, x2, d1, d2, sig, ls):
-    d= sig*sig/(ls*ls*ls*ls)
-    e= ls*ls
-    f= 1/(2*ls*ls)
+    d = sig*sig / (ls*ls*ls*ls)
+    e = ls*ls
+    f = 1/(2*ls*ls)
     kern = 0
     
     # record central atom types
@@ -22,8 +32,9 @@ def two_body(x1, x2, d1, d2, sig, ls):
             coord2 = x2[d2][n]
             
             # check that atom types match
-            if (c1==c2 and e1==e2) or (c1==e2 and c2==e1):
+            if (c1 == c2 and e1 == e2) or (c1 == e2 and c2 == e1):
                 rr = (r1-r2)*(r1-r2)
-                kern += d*exp(-f*rr)*coord1*coord2*(e-rr)
+                kern += d*np.exp(-f*rr)*coord1*coord2*(e-rr)
                 
     return kern
+
